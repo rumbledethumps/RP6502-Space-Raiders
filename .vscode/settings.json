@@ -15,4 +15,8 @@
     "cmake.preferredGenerators": [
         "Unix Makefiles"
     ],
+    "files.associations": {
+        "stdlib.h": "c",
+        "unistd.h": "c"
+    },
 }
