@@ -1,46 +1,32 @@
-# RP6502 VSCode Scaffolding for CC65
+# Clone of Retro Arcade Game for the RP6502 Picocomputer, developed using CC65 
 
-This is scaffolding for a new Picocomputer 6502 software project.
+Objective: Eliminate all raiders in each wave
 
-### Linux Tools Install:
- * [VSCode](https://code.visualstudio.com/). This has its own installer.
- * A source install of [CC65](https://cc65.github.io/getting-started.html).
- * The following tools installed from your package managers:
-    * `sudo apt-get install cmake python3 pip git build-essential`
-    * `pip install pyserial`
+Lives - 3 lives plus an additional "bonus" life when Player's score exceeds 1500
+Game over when player has zero lives remaining or when a Raider touches down
+Player firing rate is limited, only one shot can be in flight at a time
+Player shots and Raider bombs can collide but won't necessarily eliminate either the shot or the bomb
+Player shots and Raider bombs will erode the protective bunkers
+When a Raider makes contact with a bunker the overlapping portion of the bunker is destroyed 
+A Raider Saucer appears periodically from the left or right margin, scoring for a Saucer hit is variable
+The number of Raider bombs increases as the Player's score increases 
+The initial position of the Raider matrix is lowered for successive waves of attack, after seven waves, the cycle repeats
+Scoring is as shown on the 2nd Splash Screen
+Number of lives remaining is indicated numerically near the bottom of the screen and by the quantity of Player Gunner Icons shown at the bottom of the screen plus the active gunner
+Player1 is blue, Player2 is yellow
+If a USB memory device is attached, the "high score" will be saved to the device's non-volatile memory and reloaded when a new game is started
 
-### Windows Tools Install:
- * [VSCode](https://code.visualstudio.com/). This has its own installer.
- * A source install of [CC65](https://cc65.github.io/getting-started.html).
-   Do not skip the step about adding bin to your path.
- * Install python by typing `python3` which will launch the Microsoft Store
-   where you start the install. If python runs, this has already been done,
-   exit python with Ctrl-Z plus Return.
- * Install the python serial library with `pip install pyserial`.
- * `winget install -e --id Kitware.CMake`.
- * `winget install -e --id GnuWin32.Make`.
-    Add "C:\Program Files (x86)\GnuWin32\bin" to your path.
- * `winget install -e --id Git.Git`.
+GAME CONTROLS
+"1" - Single player mode
+"2" - Two player mode
+"d" - Demo mode
+"p" - Pause the game
+"r" - Restart the game
+"esc" - Terminate the game, return to Picocomputer OS
 
-### Getting Started:
-Go to the [GitHub template](https://github.com/picocomputer/vscode-cc65) and
-select "Use this template" then "Create a new repository". GitHub will make a
-clean project for you to start with. Then you can download the repository
-and open the files.
+PLAYER CONTROLS:
+"left arrow" - Move player left
+"right arrow" - Move player right
+"space bar" or "up arrow" or "down arrow" - fire button
 
-```
-$ git clone [path_to_github]
-$ cd [to_where_it_cloned]
-$ code .
-```
 
-Install the extensions and choose the default or obvious choice if VSCode
-prompts you.
-
-You can build with F7. Running a program is done with "Run Build Task..."
-CTRL-SHIFT-B. If the default communications device doesn't work, edit ".rp6502"
-in the project root folder. This file will be created the first time you
-"Run Build Task..." and will be ignored by git.
-
-Edit CMakeLists.txt to add new source and asset files. It's
-pretty normal C/ASM development from here on.
