@@ -342,6 +342,8 @@ static void initialize_char_screen() {
             RIA.rw0 = 13;               // purple "PLAYER <x>"
         else if (i >= 200 && i < 240)
             RIA.rw0 = 9;                // red "GAME OVER"
+        else if (i >= 160 && i < 200)
+            RIA.rw0 = 13;               // purple "-Demo-"            
         else if (i >= 97 && i < 101)
             RIA.rw0 = 11;               // yellow "BONUS"
         else if (i >= 0 && i < 40)
@@ -545,23 +547,24 @@ void restore_bunkers(unsigned char active_player) {
 }
 
 void update_numerical_lives (bool blink_lives, unsigned char num_of_lives_remaining) {
-    unsigned char blink_cycles;
+    unsigned char blink_cycles, skip;
     strcpy (lives_num_str, " ");     
     lives_num_str[0] = (char)num_of_lives_remaining + '0'; 
     if (blink_lives) {
         for (blink_cycles = 0; blink_cycles < 10; blink_cycles++ ) {
             if (active_player == 1) {
                 print_string (29, 34, " ", false);
-                delay(10);  
+                skip = new_delay(10);  
                 print_string (29, 34, lives_num_str, false);
-                delay(10);
+                skip = new_delay(10); 
             } 
             else {
                 print_string (29, 5, " ", false);
-                delay(10);  
+                skip = new_delay(10); 
                 print_string (29, 5, lives_num_str, false);
-                delay(10);                
+                skip = new_delay(10);                
             }
+            if (skip) return;
         }
     }
     else {
@@ -768,6 +771,7 @@ void main()
 
     // GAME VARS
     FILE *fptr;
+    bool demo_terminated;
 
     // LIVES
     unsigned lives_spr_ptr, lives_x_pos, lives_y_pos; 
@@ -868,6 +872,7 @@ void main()
 
     // set to zero in case this is the first ime the game is played, will be overwritten if hiscore file exists on USB drive
     Game.hi_score = 0;  
+    demo_terminated = false;
 
     // **********************
     // NEW GAME INITIALIZATON
@@ -889,20 +894,19 @@ void main()
 
         // GAME VAR/ARRAY INITIALIZATION
         Game.cheat_code = 0;        // in case we have some, 1 enables
-        Game.play_mode = false;     // press 1 or 2 (players, if no input is received, then demo mode is initiatied
         Game.restart = false;       // pressing R restarts the game              
         Game.pause = false;         // pressing P pauses the game, pressing again resumes
         level_completed = false;    // current LEVEL/WAVE has been completed (all aliens terminated)                 
         srand(15);                  // Initialize random # gen 
-        Game.num_players = 1;       // 0 = 1 player, 1 = 2 players
         active_player = 0;          // 1st player (player 0) always goes first
         skip = false;               // flag to skip splash screens and go straight to demo/play
 
         // Load HIGH SCORE from 'hiscore' file on USB Drive,
-        delay(120);     
+// With new 0.9 FW release this may be fixed... testing... SEEMS to be OK without the 2 sec delay        
+        //delay(120);     
         // without this delay, fopen appears to be unreliable when code is INSTALLED in the pico's EPROM
         // ... seems to be ok when loading from USB drive or USB serial
-        fptr = fopen("hiscore", "rb");
+        fptr = fopen("raiders.hiscore", "rb");
         /*
         // FILE OPEN - ERROR HANDLER
         if (file != NULL) {
@@ -913,163 +917,184 @@ void main()
         fread (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
         fclose(fptr);
 
-        // #######################################################
-        // ##############    INITIALIZE GRAPHICS    ############## 
-        // #######################################################
-        
-        // screen is 320 x 240 pixels screen OR 40 cols by 30 rows characters 
-        xreg_vga_canvas(1);                
+        // Initialization code that should be skipped when demo mode has been running and is then  terminated
+        if (demo_terminated) {
+            demo_terminated = false;
+            // clear screen
+            clear_char_screen(5, 22);
+            for (i = 0; i < TOTAL_NUM_SPR; i++) {      
+                ptr = SPR_CFG_BASE + (i * sizeof(vga_mode4_sprite_t));
+                if (i == 4 || i == 60) {
+                    xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, DISAPPEAR_X);
+                }
+                else {
+                    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
+                }    
+            } 
+        }
+        else {    
+            Game.play_mode = false;     // press 1 or 2 (players, if no input is received, then demo mode is initiatied            
+            Game.num_players = 1;       // 0 = 1 player, 1 = 2 players0
 
-        // DEBUG - if needed to display console text for DEBUG
-        // xreg_vga_mode(0, 0);    // setup console in plane 0 for debug purposes, remove when not in debug mode           
-        // for (i = 0; i<24; i++) puts("\n");      // clear console screen
+            // #######################################################
+            // ##############    INITIALIZE GRAPHICS    ############## 
+            // #######################################################
+            // screen is 320 x 240 pixels screen OR 40 cols by 30 rows characters 
+            xreg_vga_canvas(1);                
 
-        // Config character mode
-        xram0_struct_set(0xFF00, vga_mode1_config_t, x_wrap, false);
-        xram0_struct_set(0xFF00, vga_mode1_config_t, y_wrap, false);
-        xram0_struct_set(0xFF00, vga_mode1_config_t, x_pos_px, 0);
-        xram0_struct_set(0xFF00, vga_mode1_config_t, y_pos_px, 0);
-        xram0_struct_set(0xFF00, vga_mode1_config_t, width_chars, 40);
-        xram0_struct_set(0xFF00, vga_mode1_config_t, height_chars, 30);
-        xram0_struct_set(0xFF00, vga_mode1_config_t, xram_data_ptr, 0xB000);    // address of 40x30 char array 
-        xram0_struct_set(0xFF00, vga_mode1_config_t, xram_palette_ptr, 0xFFFF); // using built-in color palette
-        xram0_struct_set(0xFF00, vga_mode1_config_t, xram_font_ptr, 0x9980);    // address of old schoole 5x7 font array 
-        // Turn on CHARACTER graphics mode
-        xreg_vga_mode(1, 3, CHAR_MODE_CFG, 1);     // setup char mode in plane 1
-        // Turn on SPRITE graphics mode
-        erase_xram_sprite_config();     // but first... clear all XRAM SPACE used for sprite config arrays and screen char 40x30 array
-        // config sprites necessary for splash screens
-        // setup just one each of the alien and saucer sprites for the "SCORING TABLE", later will totally reconfig all sprites 
-        ptr = SPR_CFG_BASE + (5 * sizeof(vga_mode4_sprite_t));          // SAUCER FIRST                  
-        xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, 96);                
-        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, SAUCER_IMG_BASE);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
-        for (i = 0; i < 3; i++) {
-            ptr = SPR_CFG_BASE + ((6 + i) * sizeof(vga_mode4_sprite_t));    // THEN 3 ALIENS       
+            // DEBUG - if needed to display console text for DEBUG
+            // xreg_vga_mode(0, 0);    // setup console in plane 0 for debug purposes, remove when not in debug mode           
+            // for (i = 0; i<24; i++) puts("\n");      // clear console screen
+
+            // Config character mode
+            xram0_struct_set(0xFF00, vga_mode1_config_t, x_wrap, false);
+            xram0_struct_set(0xFF00, vga_mode1_config_t, y_wrap, false);
+            xram0_struct_set(0xFF00, vga_mode1_config_t, x_pos_px, 0);
+            xram0_struct_set(0xFF00, vga_mode1_config_t, y_pos_px, 0);
+            xram0_struct_set(0xFF00, vga_mode1_config_t, width_chars, 40);
+            xram0_struct_set(0xFF00, vga_mode1_config_t, height_chars, 30);
+            xram0_struct_set(0xFF00, vga_mode1_config_t, xram_data_ptr, 0xB000);    // address of 40x30 char array 
+            xram0_struct_set(0xFF00, vga_mode1_config_t, xram_palette_ptr, 0xFFFF); // using built-in color palette
+            xram0_struct_set(0xFF00, vga_mode1_config_t, xram_font_ptr, 0x9980);    // address of old schoole 5x7 font array 
+            // Turn on CHARACTER graphics mode
+            xreg_vga_mode(1, 3, CHAR_MODE_CFG, 1);     // setup char mode in plane 1
+            // Turn on SPRITE graphics mode
+            erase_xram_sprite_config();     // but first... clear all XRAM SPACE used for sprite config arrays and screen char 40x30 array
+            // config sprites necessary for splash screens
+            // setup just one each of the alien and saucer sprites for the "SCORING TABLE", later will totally reconfig all sprites 
+            ptr = SPR_CFG_BASE + (5 * sizeof(vga_mode4_sprite_t));          // SAUCER FIRST                  
             xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, 96);                
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, INVR_IMG_GREENIE + (i * 2 * SPR_16X16_SIZE ));
+            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, SAUCER_IMG_BASE);
             xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
             xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+            for (i = 0; i < 3; i++) {
+                ptr = SPR_CFG_BASE + ((6 + i) * sizeof(vga_mode4_sprite_t));    // THEN 3 ALIENS       
+                xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, 96);                
+                xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
+                xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, INVR_IMG_GREENIE + (i * 2 * SPR_16X16_SIZE ));
+                xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
+                xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+            }
+            //Define SPRITE config structure base address and total # of sprites (length of config structure)             
+            xreg_vga_mode(4, 0, SPR_CFG_BASE, TOTAL_NUM_SPR);   // setup sprite mode in plane 0
+            // first clear screen
+            initialize_char_screen();
+            delay(90);      // this appears to be necessary to give the OS a chance to finish it's business before 
+                            // ... displaying anything
+
+            // ######################################
+            // ########  Keyboard operation  ########
+            //      first, read 32 bytes of key state data from xram keyboard structure (currently at 0xFF10 to 0xFF2F)
+            //      check first byte for LSBit = 0, indicating key has been pressed
+            //      use this algorithm to find which bit of the 256 possible bits are set to '1'
+            //          key(code) (keystates[code >> 3] & (1 << (code & 7)))
+            //      by using the 'CODE' for the key of interest to find/check the bit in the array of 256 bits that represents the key
+            //      to see if it's a '1'
+            // KEY PRESSES 
+            // 1 = 1 player, 2 = 2 players, d = demo mode, < = gunner left, > = right, space or up or down arrow = fire, p = pause, ESC = quit, S = save game
+            // Turn on USB keyboard I/O
+            xreg_ria_keyboard(KEYBOARD_INPUT);      // keyboard data is at 0xFF10 
+            paused = false, handled_key = false;
+
+            // ######################################
+            // #######   SPLASH SCREENS   ###########
+            // load initial splash screen (scoring table), start with common/static elements used on (most) all screens
+            print_string (0, 6, "SCORE<1> HI-SCORE SCORE<2>", !slow);        
+            print_string (2, 7, "0000", !slow);
+            update_score_string (Game.hi_score);
+            print_string(2, 17, score_value_str, false);         
+
+            // used to toggle between splash screens (scoring talbe and) # players screens) after each demo run
+            splash_screen_toggle = 1 - splash_screen_toggle;   
+
+            // NEXT load the 1st of 2 splash screens, pause for input, if none, transition to demo mode, then alternate splash 1, demo, splash 2,... until 
+            //      # players is selected and PlAY commences
+            // SPLASH SCREEN LOOP
+            while (1) {  // using while(1)/break command to enable halting the screen print and moving directly to next bit of code
+                if (splash_screen_toggle == 0) {          // Load first screeen, then alternate after each demo run
+                    if (print_string (7, 17, "PLAY", slow)) break;   // use 'slow' to flag text that should be printed slowly 
+                    if (print_string (10, 13, "SPACE RAIDERS", slow)) break; 
+                    new_delay(70);      // for dramatic effect
+                    if (print_string (14, 12, "*SCORING TABLE*", !slow)) break;
+                    new_delay(70);
+                    // unlike orig display and text to the right of it, one row at a time
+                    ptr = SPR_CFG_BASE + (5 * sizeof(vga_mode4_sprite_t));                                  
+                    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, 124);
+                    if (print_string (16, 15, "= ??", !slow)) break;
+                    if (print_string (16, 20, "MYSTERY", slow)) break;
+                    for (i = 0; i < 3; i++) {
+                        ptr = SPR_CFG_BASE + ((6 + i) * sizeof(vga_mode4_sprite_t));                                  
+                        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, 140 + (i * 16));
+                        switch(i) {
+                            case 0: 
+                                skip = print_string (18, 15, "= 30 POINTS", slow);
+                                break;
+                            case 1:
+                                skip = print_string (20, 15, "= 20 POINTS", slow);
+                                break;
+                            case 2:
+                                skip = print_string (22, 15, "= 10 POINTS", slow);
+                                break;
+                        }
+                        if (skip) break;
+                    }                
+                }
+                // load uniques for 2nd screen
+                else {  
+                    if (print_string (14, 7, "*SELECT NUMBER OF PLAYERS*", !slow)) break;   // use 'slow' to flag text that should be printed slowly 
+                    if (print_string (17, 12, "<1 OR 2 PLAYERS>", slow)) break; 
+                }
+                new_delay(180);     // pause for input for a couple seconds, if none move on with default = 'demo mode' 
+                break;                
+            }  // END SPLASH SCREEN WHILE LOOP 
+
+            // ############   GET KEYBOARD INPUT   ##############
+            // ##################################################
+            RIA.addr0 = KEYBOARD_INPUT;
+            RIA.step0 = 1;
+            while(!handled_key) {
+                for (i = 0; i < KEYBOARD_BYTES; i++) keystates[i] = RIA.rw0;    
+                if (!handled_key && (keystates[2] & 8)) { // pause
+                    paused = !paused;
+                } 
+                else if (!handled_key && key(KEY_R)) {    // UNUSED restart game0
+                } 
+                else if (!handled_key && key(KEY_ESC)) {  // exit game
+                    fptr = fopen("raiders.hiscore", "wb+");
+                    fwrite (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
+                    fclose (fptr);             
+                    exit(0);
+                } 
+                else if (!handled_key && key(KEY_D)) {    // demo mode
+                    // Demo is the default this just allows us to start the demo on command instead of waiting for delay
+                    Game.play_mode = false;
+                    Game.num_players = 1;
+                    break;
+                } 
+                else if (!handled_key && key(KEY_X)) {    // eXtended demo mode
+                    // not used
+                    printf("switch to extended DEMO mode for DEBUG\n");
+                    break;                    
+                } 
+                else if (!handled_key && key(KEY_1)) {    // play mode - 1 player
+                    Game.num_players = 0;
+                    Game.play_mode = true;
+                    break;
+                } 
+                else if (!handled_key && key(KEY_2)) {    // play mode - 2 players
+                    Game.num_players = 1;                 // "1" means there are 2 players
+                    Game.play_mode = true;
+                    break;
+                }
+                handled_key = true;    
+            }
+
         }
-        //Define SPRITE config structure base address and total # of sprites (length of config structure)             
-        xreg_vga_mode(4, 0, SPR_CFG_BASE, TOTAL_NUM_SPR);   // setup sprite mode in plane 0
-        // first clear screen
-        initialize_char_screen();
-        delay(90);      // this appears to be necessary to give the OS a chance to finish it's business before 
-                        // ... displaying anything
-
-        // ######################################
-        // ########  Keyboard operation  ########
-        //      first, read 32 bytes of key state data from xram keyboard structure (currently at 0xFF10 to 0xFF2F)
-        //      check first byte for LSBit = 0, indicating key has been pressed
-        //      use this algorithm to find which bit of the 256 possible bits are set to '1'
-        //          key(code) (keystates[code >> 3] & (1 << (code & 7)))
-        //      by using the 'CODE' for the key of interest to find/check the bit in the array of 256 bits that represents the key
-        //      to see if it's a '1'
-        // KEY PRESSES 
-        // 1 = 1 player, 2 = 2 players, d = demo mode, < = gunner left, > = right, space or up or down arrow = fire, p = pause, ESC = quit, S = save game
-        // Turn on USB keyboard I/O
-        xreg_ria_keyboard(KEYBOARD_INPUT);      // keyboard data is at 0xFF10 
-        paused = false, handled_key = false;
-
-        // ######################################
-        // #######   SPLASH SCREENS   ###########
-        // load initial splash screen (scoring table), start with common/static elements used on (most) all screens
-        print_string (0, 6, "SCORE<1> HI-SCORE SCORE<2>", !slow);            
-        print_string (2, 7, "0000", !slow);
-        update_score_string (Game.hi_score);
-        print_string(2, 17, score_value_str, false);         
-
-        // used to toggle between splash screens (scoring talbe and) # players screens) after each demo run
-        splash_screen_toggle = 1 - splash_screen_toggle;   
-
-        // NEXT load the 1st of 2 splash screens, pause for input, if none, transition to demo mode, then alternate splash 1, demo, splash 2,... until 
-        //      # players is selected and PlAY commences
-        // SPLASH SCREEN LOOP
-        while (1) {  // using while(1)/break command to enable halting the screen print and moving directly to next bit of code
-            if (splash_screen_toggle == 0) {          // Load first screeen, then alternate after each demo run
-                if (print_string (7, 17, "PLAY", slow)) break;   // use 'slow' to flag text that should be printed slowly 
-                if (print_string (10, 13, "SPACE RAIDERS", slow)) break; 
-                if (new_delay(70)) break;      // for dramatic effect
-                if (print_string (14, 12, "*SCORING TABLE*", !slow)) break;
-                if (new_delay(70)) break;
-                // unlike orig display and text to the right of it, one row at a time
-                ptr = SPR_CFG_BASE + (5 * sizeof(vga_mode4_sprite_t));                                  
-                xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, 124);
-                if (print_string (16, 15, "= ??", !slow)) break;
-                if (print_string (16, 20, "MYSTERY", slow)) break;
-                for (i = 0; i < 3; i++) {
-                    ptr = SPR_CFG_BASE + ((6 + i) * sizeof(vga_mode4_sprite_t));                                  
-                    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, 140 + (i * 16));
-                    switch(i) {
-                        case 0: 
-                            skip = print_string (18, 15, "= 30 POINTS", slow);
-                            break;
-                        case 1:
-                            skip = print_string (20, 15, "= 20 POINTS", slow);
-                            break;
-                        case 2:
-                            skip = print_string (22, 15, "= 10 POINTS", slow);
-                            break;
-                    }
-                    if (skip) break;
-                }                
-            }
-            // load uniques for 2nd screen
-            else {  
-                if (print_string (14, 7, "*SELECT NUMBER OF PLAYERS*", !slow)) break;   // use 'slow' to flag text that should be printed slowly 
-                if (print_string (17, 12, "<1 OR 2 PLAYERS>", slow)) break; 
-            }
-            new_delay(120);     // pause for input for a couple seconds, if none move on with default = 'demo mode' 
-            break;                
-        }  // END SPLASH SCREEN WHILE LOOP 
-
-        // ############   GET KEYBOARD INPUT   ##############
-        // ##################################################
-        RIA.addr0 = KEYBOARD_INPUT;
-        RIA.step0 = 1;
-        while(!handled_key) {
-            for (i = 0; i < KEYBOARD_BYTES; i++) keystates[i] = RIA.rw0;    
-            if (!handled_key && (keystates[2] & 8)) { // pause
-                paused = !paused;
-            } 
-            else if (!handled_key && key(KEY_R)) {    // UNUSED restart game0
-            } 
-            else if (!handled_key && key(KEY_ESC)) {  // exit game
-                fptr = fopen("hiscore", "wb+");
-                fwrite (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
-                fclose (fptr);             
-                exit(0);
-            } 
-            else if (!handled_key && key(KEY_D)) {    // demo mode
-                // Demo is the default this just allows us to start the demo on command instead of waiting for delay
-                Game.play_mode = false;
-                Game.num_players = 1;
-                break;
-            } 
-            else if (!handled_key && key(KEY_X)) {    // eXtended demo mode
-                // not used
-                printf("switch to extended DEMO mode for DEBUG\n");
-                break;                    
-            } 
-            else if (!handled_key && key(KEY_1)) {    // play mode - 1 player
-                Game.num_players = 0;
-                Game.play_mode = true;
-                break;
-            } 
-            else if (!handled_key && key(KEY_2)) {    // play mode - 2 players
-                Game.num_players = 1;   // "1" means there are 2 players
-                Game.play_mode = true;
-                break;
-            }
-            handled_key = true;    
-        }
-        // if 2 players, initialize score text for 2nd player
+        // if 2 players, initialize score text for 2nd player and display Player <1> for first player to play
         if (Game.num_players == 1) print_string (2, 27, "0000", !slow);
-
+        else print_string (2, 27, "    ", !slow);
+     
         // PLAYER "STATE" ARRAY INITIALIZATION for both players
         //      this is updated at end of a round to allow continuation with next life (if available) 
         for (i = 0; i < 2; i++) {
@@ -1147,6 +1172,18 @@ void main()
         for (i = 0; i < 4; i++) {   // and clear sprites from SCORING TABLE 
             ptr = SPR_CFG_BASE + ((5 + i) * sizeof(vga_mode4_sprite_t));                                  
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
+        }
+
+        //print_string (4, 14,"-= DEMO =-", !slow);  
+        if (Game.num_players == 1) {
+            print_string (6, 14,"PLAYER <1>", !slow);            
+            delay(120);
+            print_string (6, 14,"          ", !slow);  
+        } 
+        else {
+            print_string (6, 16,"READY?", !slow);            
+            delay(120);
+            print_string (6, 16,"          ", !slow); 
         }
 
         // SPRITE VARS
@@ -1565,7 +1602,7 @@ void main()
                             print_string (5, 15,"GAME OVER", slow); 
                             Game.play_mode = false;
                             delay (180);
-                            fptr = fopen("hiscore", "wb+");             
+                            fptr = fopen("raiders.hiscore", "wb+");             
                             fwrite (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
                             fclose (fptr);                             
                             break;  
@@ -2025,10 +2062,11 @@ void main()
                         RIA.addr0 = KEYBOARD_INPUT;
                         RIA.step0 = 2;
                         keystates[0] = RIA.rw0;
-                        RIA.step0 = 3;
+                        RIA.step0 = 1;
                         keystates[2] = RIA.rw0;
-                        //missing value of [3] for "extended demo"                        
-                        RIA.step0 = 4;                        
+                        RIA.step0 = 2; 
+                        keystates[3] = RIA.rw0;                                                
+                        RIA.step0 = 4;                                                
                         keystates[5] = RIA.rw0;
                         RIA.step0 = 0;                        
                         keystates[9] = RIA.rw0;
@@ -2063,12 +2101,24 @@ void main()
                             } else if ((keystates[2] & 32)) { // restart game
                                 Game.restart = true;
                             } else if ((keystates[5] & 2)) { // exit game
-                                fptr = fopen("hiscore", "wb+");               
+                                fptr = fopen("raiders.hiscore", "wb+");               
                                 fwrite (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
                                 fclose (fptr);
                                 exit(0);
                             } else if ((keystates[3] & 8)) {  // do demo mode immediately 
                                 printf("switch to extended DEMO mode for DEBUG\n");
+                                break;                    
+                            } else if ((keystates[3] & 64)) {  // quit demo, start 1 player game 
+                                demo_terminated = true; 
+                                Game.num_players = 0;
+                                Game.play_mode = true;                           
+                                Game.restart = true;
+                                break;                    
+                            } else if ((keystates[3] & 128)) {  // quit demo, start 2 player game
+                                demo_terminated = true;
+                                Game.num_players = 1;
+                                Game.play_mode = true;                                  
+                                Game.restart = true;                                
                                 break;                    
                             }
                             handled_key = true;
@@ -2084,7 +2134,7 @@ void main()
                 
                 if (Game.restart) {
                     xreg(0, 1, 0x00, 0xFFFF);       // turn off PSG 
-                    fptr = fopen("hiscore", "wb+");             
+                    fptr = fopen("raiders.hiscore", "wb+");             
                     fwrite (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
                     fclose (fptr); 
                     break;
