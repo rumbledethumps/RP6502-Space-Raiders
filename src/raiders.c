@@ -903,7 +903,7 @@ void main()
 
         // Load HIGH SCORE from 'hiscore' file on USB Drive,
 // With new 0.9 FW release this may be fixed... testing... SEEMS to be OK without the 2 sec delay        
-        //delay(120);     
+        delay(120);     
         // without this delay, fopen appears to be unreliable when code is INSTALLED in the pico's EPROM
         // ... seems to be ok when loading from USB drive or USB serial
         fptr = fopen("raiders.hiscore", "rb");
