@@ -273,7 +273,15 @@ unsigned char new_delay (ticks) {
                 if (v != RIA.vsync){
                     tempz = RIA.rw1 & 1;
                     if (!tempz) {
-                        return 1;
+                        RIA.addr1 = KEYBOARD_INPUT + 3;    
+                        keystates[3] = RIA.rw1; 
+                        if ((keystates[3] & 64)) {  // quit demo, start 1 player game 
+                            return 1;
+                        } else if ((keystates[3] & 128)) {  // quit demo, start 2 player game
+                            return 2;
+                        }
+                        else return 3;
+                        keystates[3] = 0;
                     }
                     v = RIA.vsync;
                     break;
@@ -874,6 +882,21 @@ void main()
     Game.hi_score = 0;  
     demo_terminated = false;
 
+    // Load HIGH SCORE from 'hiscore' file on USB Drive,      
+    delay(120);     
+    // without this delay, fopen appears to be unreliable when code is INSTALLED in the pico's EPROM
+    // ... seems to be ok when loading from USB drive or USB serial
+    fptr = fopen("raiders.hiscore", "rb");
+    /*
+    // FILE OPEN - ERROR HANDLER
+    if (file != NULL) {
+        printf("USB DRIVE: Hi-score file is missing\n");
+        delay(240);                        
+    }         
+    */
+    fread (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
+    fclose(fptr);
+
     // **********************
     // NEW GAME INITIALIZATON
     // **********************
@@ -901,27 +924,13 @@ void main()
         active_player = 0;          // 1st player (player 0) always goes first
         skip = false;               // flag to skip splash screens and go straight to demo/play
 
-        // Load HIGH SCORE from 'hiscore' file on USB Drive,
-// With new 0.9 FW release this may be fixed... testing... SEEMS to be OK without the 2 sec delay        
-        delay(120);     
-        // without this delay, fopen appears to be unreliable when code is INSTALLED in the pico's EPROM
-        // ... seems to be ok when loading from USB drive or USB serial
-        fptr = fopen("raiders.hiscore", "rb");
-        /*
-        // FILE OPEN - ERROR HANDLER
-        if (file != NULL) {
-            printf("USB DRIVE: Hi-score file is missing\n");
-            delay(240);                        
-        }         
-        */
-        fread (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
-        fclose(fptr);
-
         // Initialization code that should be skipped when demo mode has been running and is then  terminated
         if (demo_terminated) {
             demo_terminated = false;
+            print_string (2, 7, "0000", !slow);
+            if (Game.num_players == 1) print_string (2, 27, "0000", !slow);
             // clear screen
-            clear_char_screen(5, 22);
+            clear_char_screen(7, 22);
             for (i = 0; i < TOTAL_NUM_SPR; i++) {      
                 ptr = SPR_CFG_BASE + (i * sizeof(vga_mode4_sprite_t));
                 if (i == 4 || i == 60) {
@@ -1002,6 +1011,7 @@ void main()
             // load initial splash screen (scoring table), start with common/static elements used on (most) all screens
             print_string (0, 6, "SCORE<1> HI-SCORE SCORE<2>", !slow);        
             print_string (2, 7, "0000", !slow);
+            print_string (2, 27, "0000", !slow);
             update_score_string (Game.hi_score);
             print_string(2, 17, score_value_str, false);         
 
@@ -1045,9 +1055,11 @@ void main()
                     if (print_string (14, 7, "*SELECT NUMBER OF PLAYERS*", !slow)) break;   // use 'slow' to flag text that should be printed slowly 
                     if (print_string (17, 12, "<1 OR 2 PLAYERS>", slow)) break; 
                 }
-                new_delay(180);     // pause for input for a couple seconds, if none move on with default = 'demo mode' 
                 break;                
-            }  // END SPLASH SCREEN WHILE LOOP 
+            }  // END SPLASH SCREEN WHILE LOOP
+            
+            // pause for input for a couple seconds, if no input, move on with default = 'demo mode' 
+            new_delay(180);     // pause for input for a couple seconds, if none move on with default = 'demo mode' 
 
             // ############   GET KEYBOARD INPUT   ##############
             // ##################################################
@@ -1079,7 +1091,7 @@ void main()
                 } 
                 else if (!handled_key && key(KEY_1)) {    // play mode - 1 player
                     Game.num_players = 0;
-                    Game.play_mode = true;
+                    Game.play_mode = true;                   
                     break;
                 } 
                 else if (!handled_key && key(KEY_2)) {    // play mode - 2 players
@@ -1089,12 +1101,9 @@ void main()
                 }
                 handled_key = true;    
             }
-
         }
         // if 2 players, initialize score text for 2nd player and display Player <1> for first player to play
-        if (Game.num_players == 1) print_string (2, 27, "0000", !slow);
-        else print_string (2, 27, "    ", !slow);
-     
+        if (Game.num_players == 0) print_string (2, 27, "    ", !slow);
         // PLAYER "STATE" ARRAY INITIALIZATION for both players
         //      this is updated at end of a round to allow continuation with next life (if available) 
         for (i = 0; i < 2; i++) {
@@ -1174,18 +1183,28 @@ void main()
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
         }
 
-        //print_string (4, 14,"-= DEMO =-", !slow);  
         if (Game.num_players == 1) {
             print_string (6, 14,"PLAYER <1>", !slow);            
-            delay(120);
-            print_string (6, 14,"          ", !slow);  
         } 
         else {
-            print_string (6, 16,"READY?", !slow);            
-            delay(120);
-            print_string (6, 16,"          ", !slow); 
+            print_string (6, 14,"  READY?  ", !slow);
         }
-
+        temp1 = new_delay (120);
+        if (temp1 == 1) {
+            demo_terminated = true; 
+            Game.num_players = 0;
+            Game.play_mode = true;                                                               
+            continue;
+        }
+        else if (temp1 == 2) {
+            demo_terminated = true; 
+            Game.num_players = 1;
+            Game.play_mode = true;                 
+            continue;                        
+        }
+        temp1 = 0;
+        print_string (6, 14,"          ", !slow);
+        
         // SPRITE VARS
         ptr = SPR_CFG_BASE;
         sprite_number = 0; 
@@ -1349,7 +1368,7 @@ void main()
         // #########################################
         // #######  SoundFX initialization   #######
         // #########################################
-        xreg(0, 1, 0x00, 0xFFFF);       // turn off PSG 
+        xreg(0, 1, 0x00, 0xFFFF);          // turn off PSG 
         delay(30);
         xreg(0, 1, 0x00, SFX_BASE_ADDR);   // initialize PSG... set base address of xregs
 
@@ -1584,13 +1603,28 @@ void main()
                         Player[active_player].exists = 0; 
                         Player[active_player].game_over = true;
                         if (Game.num_players == 1) {  // TWO PLAYER GAME AND OTHER PLAYER EXISTS
-                        // ##### FULL GAME OVER #####
                             print_string (27, 9,"PLAYER <", !slow); 
                             if (active_player == 0) print_string (27, 17, "1> GAME OVER", !slow);
                             else print_string (27, 17, "2> GAME OVER", !slow);
-                            delay (180);
+                            // new_delay (180);
+                            temp1 = new_delay (180);
+                            print_string (27, 8,"                      ", !slow);                                 
+                            if (temp1 == 1) {
+                                demo_terminated = true; 
+                                Game.num_players = 0;
+                                Game.play_mode = true;
+                                break;                           
+                            }
+                            else if (temp1 == 2) {
+                                demo_terminated = true; 
+                                Game.num_players = 1;
+                                Game.play_mode = true;
+                                break;                                             
+                            }
+                            temp1 = 0;                            
                             print_string (27, 9,"                          ", !slow); 
                         }
+                        // ##### FULL GAME OVER #####                        
                         // execute GAME OVER procedure (both players) 
                         if (!another_player) {
                             clear_char_screen(5, 22);
@@ -1600,8 +1634,20 @@ void main()
                             ptr = SPR_CFG_BASE + (SAUCER_EXPLOS_FIRST_SPR_NUM * sizeof(vga_mode4_sprite_t));
                             xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, SAUCER_BASE_X);
                             print_string (5, 15,"GAME OVER", slow); 
-                            Game.play_mode = false;
-                            delay (180);
+                            temp1 = new_delay (180);
+                            print_string (5, 14,"          ", !slow);                                 
+                            if (temp1 == 1) {
+                                demo_terminated = true; 
+                                Game.num_players = 0;
+                                Game.play_mode = true;                           
+                            }
+                            else if (temp1 == 2) {
+                                demo_terminated = true; 
+                                Game.num_players = 1;
+                                Game.play_mode = true;                                             
+                            }
+                            temp1 = 0;
+                            // update hiscore file
                             fptr = fopen("raiders.hiscore", "wb+");             
                             fwrite (&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
                             fclose (fptr);                             
