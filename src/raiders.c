@@ -1148,7 +1148,7 @@ void main()
             //      by using the 'CODE' for the key of interest to find/check the bit in the array of 256 bits that represents the key
             //      to see if it's a '1'
             // KEY PRESSES
-            // 1 = 1 player, 2 = 2 players, d = demo mode, < = gunner left, > = right, space or up or down arrow = fire, p = pause, ESC = quit, S = save game
+            // 1 = 1 player, 2 = 2 players, d = demo mode, < = gunner left, > = right, space or up or down arrow = fire, p = pause, S = save game
             // Turn on USB keyboard I/O
             xreg_ria_keyboard(KEYBOARD_INPUT); // keyboard data is at 0xFF10
             paused = false, handled_key = false;
@@ -1235,13 +1235,6 @@ void main()
                 }
                 else if (!handled_key && key(KEY_R))
                 { // UNUSED restart game0
-                }
-                else if (!handled_key && key(KEY_ESC))
-                { // exit game
-                    fptr = fopen("raiders.hiscore", "wb+");
-                    fwrite(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
-                    fclose(fptr);
-                    exit(0);
                 }
                 else if (!handled_key && key(KEY_D))
                 { // demo mode
@@ -2432,13 +2425,6 @@ void main()
                             else if ((keystates[2] & 32))
                             { // restart game
                                 Game.restart = true;
-                            }
-                            else if ((keystates[5] & 2))
-                            { // exit game
-                                fptr = fopen("raiders.hiscore", "wb+");
-                                fwrite(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
-                                fclose(fptr);
-                                exit(0);
                             }
                             else if ((keystates[3] & 8))
                             { // do demo mode immediately
