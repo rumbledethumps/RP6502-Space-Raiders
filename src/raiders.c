@@ -2410,6 +2410,7 @@ void main()
                         RIA.step0 = 0;
                         keystates[9] = RIA.rw0;
                         // don't knpw why but have to reset address or add delay to make it (reading 10) work
+                        // From Rumbledethumps: this is cc65 bug, it's ignoring volatile, see raiders.c.obj.s
                         RIA.addr0 = KEYBOARD_INPUT + 10;
                         keystates[10] = RIA.rw0;
                     }
