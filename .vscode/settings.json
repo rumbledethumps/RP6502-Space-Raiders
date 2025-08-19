@@ -13,10 +13,14 @@
     ],
     "cmake.showSystemKits": false,
     "cmake.preferredGenerators": [
-        "Unix Makefiles"
+        "Unix Makefiles",
     ],
-    "files.associations": {
-        "stdlib.h": "c",
-        "unistd.h": "c"
+    "cmake.options.advanced": {
+        "launch": {
+            "statusBarVisibility": "hidden",
+        },
+        "debug": {
+            "statusBarVisibility": "hidden",
+        }
     },
 }
