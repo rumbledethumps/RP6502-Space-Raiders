@@ -21,15 +21,16 @@
 #include <fcntl.h>
 
 // XRAM MEMORY LAYOUT
-//  0x0000 - 0x0200 -- Blank (512)
-//  0x0200 - 0x9980 -- Sprite IMAGES (37K)
-//  0x9980 - 0xA180 -- Font TABLE (2K)
-//  0xB000 - 0xBE10 -- On screen 40x30 CHAR ARRAY (40x30 x3 bytes per char = 3600)
-//  0xBE10 - 0xC000 -- Blank (496)
-//  0xC000 - 0xC250 -- Sprite Config Array (74 sprites x 8 bytes per sprite = 592)
-//  0xFF00 - 0xFF10 -- Character mode config array
-//  0xFF10 - 0xFF40 -- Realtime keyboard key state array
-//  0xFF40 - 0xFF80 -- Sound FX 8 ch by 8 byte data array
+//  0x0000 - 0x01FF -- Blank (512)
+//  0x0200 - 0x997F -- Sprite IMAGES (37K)
+//  0x9980 - 0xA17F -- Font TABLE (2K)
+//  0xB000 - 0xBE0F -- On screen 40x30 CHAR ARRAY (40x30 x3 bytes per char = 3600)
+//  0xBE10 - 0xBFFF -- Blank (496)
+//  0xC000 - 0xC24F -- Sprite Config Array (74 sprites x 8 bytes per sprite = 592)
+//  0xFF00 - 0xFF0F -- Character mode config array
+//  0xFF10 - 0xFF3F -- Direct keyboard key state array
+//  0xFF40 - 0xFF7F -- Sound FX 8 ch by 8 byte data array
+//  0xFF80 = 0xFFA8 -- Direct gamepads
 
 // ###########   KNOWN ISSUES LIST   ###########
 // final alien is not exploding
@@ -1151,6 +1152,8 @@ void main()
             // 1 = 1 player, 2 = 2 players, d = demo mode, < = gunner left, > = right, space or up or down arrow = fire, p = pause, S = save game
             // Turn on USB keyboard I/O
             xreg_ria_keyboard(KEYBOARD_INPUT); // keyboard data is at 0xFF10
+            xreg(0, 0, 2, 0xFF80U);            // gamepad TODO use xreg_ria_gamepad(0xFF80U) after cc65 updates
+
             paused = false, handled_key = false;
 
             // ######################################
@@ -2372,6 +2375,27 @@ void main()
                 // every tick read specific bytes from keyboard data structure @ 0xFF10
                 do
                 {
+                    // GAMEPAD input
+                    {
+                        int bits;
+                        RIA.step0 = 1;
+                        RIA.addr0 = GAMEPAD_INPUT;
+                        bits = RIA.rw0 | RIA.rw0; // merge dpad and lstick
+                        if ((bits & 0x4) && !(bits & 0x1))
+                        {
+                            Gunner.direction_left = true;
+                            Gunner.direction_right = false;
+                        }
+                        if ((bits & 0x8) && !(bits & 0x4))
+                        {
+                            Gunner.direction_left = false;
+                            Gunner.direction_right = true;
+                        }
+                        if (RIA.rw0 & 0x3F) // Any button shoots
+                        {
+                            Gunner.shoot = true;
+                        }
+                    }
                     if (current_time % 1 == 0)
                     {
                         RIA.addr0 = KEYBOARD_INPUT;
@@ -2393,12 +2417,12 @@ void main()
                     if (!(keystates[0] & 1))
                     { // which one?
                         // direction and firing are set here, then reset in Gunner MOVE and Bullet SPAWN sections
-                        if (!paused && (keystates[9] & 128))
+                        if (!paused && (keystates[9] & 128) && !(keystates[10] & 1))
                         { // move ship right
                             Gunner.direction_right = true;
                             Gunner.direction_left = false;
                         }
-                        if (!paused && (keystates[10] & 1))
+                        if (!paused && (keystates[10] & 1) && !(keystates[9] & 128))
                         { // move ship left
                             Gunner.direction_left = true;
                             Gunner.direction_right = false;
