@@ -348,11 +348,23 @@ void read_keystates(void)
         keystates[i] = RIA.rw1;
 }
 
-// Wait for N vsync ticks, polling keyboard each tick.
-// Returns: 0=timeout, 1=KEY_1 pressed, 2=KEY_2 pressed, 3=other key pressed
+// Gamepad XRAM layout: 10 bytes per pad, 4 pads max (40 bytes total)
+// Byte 0: DPAD (bits 0-3 = up/down/left/right, bit 7 = connected)
+// Byte 1: STICKS (bits 0-3 = lstick u/d/l/r, bits 4-7 = rstick u/d/l/r)
+// Byte 2: BTN0 (bit 0=A, 1=B, 2=C, 3=X, 4=Y, 5=Z, 6=L1, 7=R1)
+// Byte 3: BTN1 (bit 0=L2, 1=R2, 2=Select, 3=Start, 4=Home, 5=L3, 6=R3)
+// Bytes 4-9: analog sticks and triggers
+#define GAMEPAD_SIZE       10   // bytes per gamepad in XRAM
+#define GAMEPAD_CONNECTED  0x80 // byte 0 bit 7
+#define GAMEPAD_BTN_START  0x08 // byte 3 bit 3
+#define GAMEPAD_BTN_SELECT 0x04 // byte 3 bit 2
+
+// Wait for N vsync ticks, polling keyboard and gamepads each tick.
+// Returns: 0=timeout, 1=1P coin, 2=2P coin, 3=other key pressed
 unsigned char delay_with_input(unsigned ticks)
 {
     unsigned di;
+    unsigned char gp_btn1;
     static uint8_t dv;
     dv = RIA.vsync;
     for (di = 0; di < ticks; di++)
@@ -360,8 +372,21 @@ unsigned char delay_with_input(unsigned ticks)
         while (dv == RIA.vsync)
             ;
         dv = RIA.vsync;
+        // All reads use channel 1 to avoid clobbering channel 0
+        // Check gamepad 0 start/select → 1P coin
+        RIA.addr1 = GAMEPAD_INPUT + 3; // BTN1 byte, gamepad 0
+        RIA.step1 = 0;
+        gp_btn1 = RIA.rw1;
+        if (gp_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
+            return 1;
+        // Check gamepad 1 start/select → 2P coin
+        RIA.addr1 = GAMEPAD_INPUT + GAMEPAD_SIZE + 3; // BTN1 byte, gamepad 1
+        gp_btn1 = RIA.rw1;
+        if (gp_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
+            return 2;
+        // Check keyboard (read_keystates also uses channel 1)
         read_keystates();
-        if (!(keystates[0] & 1)) // any key pressed?
+        if (!(keystates[0] & 1))
         {
             if (key(KEY_1)) return 1;
             if (key(KEY_2)) return 2;
@@ -372,11 +397,13 @@ unsigned char delay_with_input(unsigned ticks)
 }
 
 // Delay that acts on coin-insert (KEY_1/KEY_2) by setting demo_terminated.
-// Use during gameplay screens (game over, wave completed, round transitions).
-// Returns: true if coin was inserted
+// Delay that responds to coin-insert only when NOT in active play mode.
+// Returns: true if coin was inserted (demo/attract mode only)
 bool coin_delay(unsigned ticks)
 {
     unsigned char result = delay_with_input(ticks);
+    if (Game.play_mode)
+        return false; // ignore coin during active gameplay
     if (result == 1)
     {
         demo_terminated = true;
@@ -1136,6 +1163,7 @@ void main()
         boot_init();
         if (!demo_terminated)
             splash_and_input();
+        demo_terminated = false;
         game_init();
         if (demo_terminated)
             continue;
@@ -1177,10 +1205,10 @@ static void boot_init(void)
     active_player = 0;       // 1st player (player 0) always goes first
     skip = false;            // flag to skip splash screens and go straight to demo/play
 
-    // Handle demo termination: cleanup and skip splash screens
+    // Handle demo termination: cleanup sprites/scores for fresh game start
+    // NOTE: do NOT clear demo_terminated here - main() needs it to skip splash_and_input
     if (demo_terminated)
     {
-        demo_terminated = false;
         print_string(2, 7, "0000", !slow);
         if (Game.num_players == 1)
             print_string(2, 27, "0000", !slow);
@@ -2322,27 +2350,57 @@ static void handle_keyboard(void)
     // ############################################
     // ############  KEYBOARD INPUT  ##############
     // ############################################
-    // Get keyboard and gamepad input for shoot, move, pause, restart, quit
+    // Get keyboard and gamepad input for shoot, move, pause, restart, coin
     do
     {
-        // Gamepad input
+        // Gamepad input - bind to active player's gamepad (10 bytes per pad)
         {
+            unsigned gp_base = GAMEPAD_INPUT + (active_player * GAMEPAD_SIZE);
             int bits;
             RIA.step0 = 1;
-            RIA.addr0 = GAMEPAD_INPUT;
-            bits = RIA.rw0 | RIA.rw0; // merge dpad and lstick
-            if ((bits & 0x4) && !(bits & 0x1))
+            RIA.addr0 = gp_base;
+            // byte 0 = dpad, byte 1 = sticks: merge for direction (left=bit2, right=bit3)
+            bits = RIA.rw0 | RIA.rw0;
+            if ((bits & 0x4) && !(bits & 0x8)) // left and not right
             {
                 Gunner.direction_left = true;
                 Gunner.direction_right = false;
             }
-            if ((bits & 0x8) && !(bits & 0x4))
+            if ((bits & 0x8) && !(bits & 0x4)) // right and not left
             {
                 Gunner.direction_left = false;
                 Gunner.direction_right = true;
             }
-            if (RIA.rw0 & 0x3F) // any button shoots
+            // byte 2 = BTN0: A(0), B(1), X(3), Y(4) for fire
+            if (RIA.rw0 & 0x1B)
                 Gunner.shoot = true;
+            // byte 3 = BTN1: coin insert (start/select) only during demo mode
+            if (!Game.play_mode)
+            {
+                unsigned char gp0_btn1, gp1_btn1;
+                // Read BTN1 bytes via channel 1 (don't clobber channel 0)
+                RIA.addr1 = GAMEPAD_INPUT + 3;
+                RIA.step1 = 0;
+                gp0_btn1 = RIA.rw1;
+                RIA.addr1 = GAMEPAD_INPUT + GAMEPAD_SIZE + 3;
+                gp1_btn1 = RIA.rw1;
+                if (gp0_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
+                {
+                    demo_terminated = true;
+                    Game.num_players = 0;
+                    Game.play_mode = true;
+                    Game.restart = true;
+                    break;
+                }
+                if (gp1_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
+                {
+                    demo_terminated = true;
+                    Game.num_players = 1;
+                    Game.play_mode = true;
+                    Game.restart = true;
+                    break;
+                }
+            }
         }
 
         // Keyboard input
@@ -2382,12 +2440,8 @@ static void handle_keyboard(void)
                 {
                     Game.restart = true;
                 }
-                else if (key(KEY_X))
-                {
-                    printf("switch to extended DEMO mode for DEBUG\n");
-                    break;
-                }
-                else if (key(KEY_1))
+                // Coin insert - only during demo/attract mode, not during active gameplay
+                else if (!Game.play_mode && key(KEY_1))
                 { // start 1 player game
                     demo_terminated = true;
                     Game.num_players = 0;
@@ -2395,7 +2449,7 @@ static void handle_keyboard(void)
                     Game.restart = true;
                     break;
                 }
-                else if (key(KEY_2))
+                else if (!Game.play_mode && key(KEY_2))
                 { // start 2 player game
                     demo_terminated = true;
                     Game.num_players = 1;
