@@ -359,12 +359,48 @@ void read_keystates(void)
 #define GAMEPAD_BTN_START  0x08 // byte 3 bit 3
 #define GAMEPAD_BTN_SELECT 0x04 // byte 3 bit 2
 
+// Check for coin insert (KEY_1, KEY_2, gamepad start/select).
+// Only responds when NOT in active play mode. Uses channel 1 to avoid clobbering channel 0.
+// Returns: 0=no coin, 1=1P coin, 2=2P coin
+unsigned char check_coin(void)
+{
+    unsigned char gp_btn1;
+    if (Game.play_mode)
+        return 0;
+    // Gamepad 0 start/select → 1P
+    RIA.addr1 = GAMEPAD_INPUT + 3;
+    RIA.step1 = 0;
+    gp_btn1 = RIA.rw1;
+    if (gp_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
+        return 1;
+    // Gamepad 1 start/select → 2P
+    RIA.addr1 = GAMEPAD_INPUT + GAMEPAD_SIZE + 3;
+    gp_btn1 = RIA.rw1;
+    if (gp_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
+        return 2;
+    // Keyboard 1/2
+    if (key(KEY_1)) return 1;
+    if (key(KEY_2)) return 2;
+    return 0;
+}
+
+// Act on a coin insert: set demo_terminated and game config.
+// Returns true if coin was inserted.
+bool act_on_coin(unsigned char coin)
+{
+    if (coin == 0) return false;
+    demo_terminated = true;
+    Game.num_players = (coin == 2) ? 1 : 0;
+    Game.play_mode = true;
+    return true;
+}
+
 // Wait for N vsync ticks, polling keyboard and gamepads each tick.
 // Returns: 0=timeout, 1=1P coin, 2=2P coin, 3=other key pressed
 unsigned char delay_with_input(unsigned ticks)
 {
     unsigned di;
-    unsigned char gp_btn1;
+    unsigned char coin;
     static uint8_t dv;
     dv = RIA.vsync;
     for (di = 0; di < ticks; di++)
@@ -372,53 +408,20 @@ unsigned char delay_with_input(unsigned ticks)
         while (dv == RIA.vsync)
             ;
         dv = RIA.vsync;
-        // All reads use channel 1 to avoid clobbering channel 0
-        // Check gamepad 0 start/select → 1P coin
-        RIA.addr1 = GAMEPAD_INPUT + 3; // BTN1 byte, gamepad 0
-        RIA.step1 = 0;
-        gp_btn1 = RIA.rw1;
-        if (gp_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
-            return 1;
-        // Check gamepad 1 start/select → 2P coin
-        RIA.addr1 = GAMEPAD_INPUT + GAMEPAD_SIZE + 3; // BTN1 byte, gamepad 1
-        gp_btn1 = RIA.rw1;
-        if (gp_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
-            return 2;
-        // Check keyboard (read_keystates also uses channel 1)
         read_keystates();
+        coin = check_coin();
+        if (coin) return coin;
         if (!(keystates[0] & 1))
-        {
-            if (key(KEY_1)) return 1;
-            if (key(KEY_2)) return 2;
-            return 3;
-        }
+            return 3; // non-coin key pressed
     }
     return 0;
 }
 
-// Delay that acts on coin-insert (KEY_1/KEY_2) by setting demo_terminated.
-// Delay that responds to coin-insert only when NOT in active play mode.
-// Returns: true if coin was inserted (demo/attract mode only)
+// Delay that acts on coin-insert by setting demo_terminated.
+// Returns: true if coin was inserted (only outside active gameplay)
 bool coin_delay(unsigned ticks)
 {
-    unsigned char result = delay_with_input(ticks);
-    if (Game.play_mode)
-        return false; // ignore coin during active gameplay
-    if (result == 1)
-    {
-        demo_terminated = true;
-        Game.num_players = 0;
-        Game.play_mode = true;
-        return true;
-    }
-    if (result == 2)
-    {
-        demo_terminated = true;
-        Game.num_players = 1;
-        Game.play_mode = true;
-        return true;
-    }
-    return false;
+    return act_on_coin(delay_with_input(ticks));
 }
 
 // clear entire character screen
@@ -2374,33 +2377,6 @@ static void handle_keyboard(void)
             // byte 2 = BTN0: A(0), B(1), X(3), Y(4) for fire
             if (RIA.rw0 & 0x1B)
                 Gunner.shoot = true;
-            // byte 3 = BTN1: coin insert (start/select) only during demo mode
-            if (!Game.play_mode)
-            {
-                unsigned char gp0_btn1, gp1_btn1;
-                // Read BTN1 bytes via channel 1 (don't clobber channel 0)
-                RIA.addr1 = GAMEPAD_INPUT + 3;
-                RIA.step1 = 0;
-                gp0_btn1 = RIA.rw1;
-                RIA.addr1 = GAMEPAD_INPUT + GAMEPAD_SIZE + 3;
-                gp1_btn1 = RIA.rw1;
-                if (gp0_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
-                {
-                    demo_terminated = true;
-                    Game.num_players = 0;
-                    Game.play_mode = true;
-                    Game.restart = true;
-                    break;
-                }
-                if (gp1_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
-                {
-                    demo_terminated = true;
-                    Game.num_players = 1;
-                    Game.play_mode = true;
-                    Game.restart = true;
-                    break;
-                }
-            }
         }
 
         // Keyboard input
@@ -2440,20 +2416,8 @@ static void handle_keyboard(void)
                 {
                     Game.restart = true;
                 }
-                // Coin insert - only during demo/attract mode, not during active gameplay
-                else if (!Game.play_mode && key(KEY_1))
-                { // start 1 player game
-                    demo_terminated = true;
-                    Game.num_players = 0;
-                    Game.play_mode = true;
-                    Game.restart = true;
-                    break;
-                }
-                else if (!Game.play_mode && key(KEY_2))
-                { // start 2 player game
-                    demo_terminated = true;
-                    Game.num_players = 1;
-                    Game.play_mode = true;
+                else if (act_on_coin(check_coin()))
+                {
                     Game.restart = true;
                     break;
                 }
