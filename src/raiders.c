@@ -370,7 +370,6 @@ unsigned char new_delay(ticks)
                         }
                         else
                             return 3;
-                        keystates[3] = 0;
                     }
                     v = RIA.vsync;
                     break;
@@ -455,7 +454,7 @@ static void initialize_char_screen()
             RIA.rw0 = 13; // purple "-Demo-"
         else if (i >= 97 && i < 101)
             RIA.rw0 = 11; // yellow "BONUS"
-        else if (i >= 0 && i < 40)
+        else if (i < 40)
             RIA.rw0 = 12; // blue "SCORE..." etc
         else
             RIA.rw0 = 15; // white
