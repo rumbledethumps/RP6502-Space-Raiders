@@ -1222,8 +1222,6 @@ static void boot_once(void)
     demo_terminated = false;
 
     // Load HIGH SCORE from 'hiscore' file on USB Drive
-    delay(120);
-    // without this delay, fopen appears to be unreliable when code is INSTALLED in the pico's EPROM
     fptr = fopen("raiders.hiscore", "rb");
     fread(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
     fclose(fptr);
