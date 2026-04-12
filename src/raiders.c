@@ -339,92 +339,60 @@ static const bool blink = true;
 // ##################################### -= FUNCTIONS =- ##############################################
 // ####################################################################################################
 
-unsigned char new_delay(ticks)
+// Read all 32 bytes of keyboard state from XRAM (uses channel 1 to avoid clobbering channel 0)
+void read_keystates(void)
 {
-    unsigned i, j, k;
-    static uint8_t v;
-    unsigned char tempz;
     RIA.addr1 = KEYBOARD_INPUT;
-    RIA.step1 = 0;
-    v = RIA.vsync;
-    for (k = 0; k < ticks; k++)
-    { // # of ticks loop
-        for (j = 0; j < 1; j++)
-        { // NOT USED -- 1/60th of a second loop
-            for (i = 0; i < 2548; i++)
-            { // watchdog timer ... loop until vsync is incremented
-                if (v != RIA.vsync)
-                {
-                    tempz = RIA.rw1 & 1;
-                    if (!tempz)
-                    {
-                        RIA.addr1 = KEYBOARD_INPUT + 3;
-                        keystates[3] = RIA.rw1;
-                        if ((keystates[3] & 64))
-                        { // quit demo, start 1 player game
-                            return 1;
-                        }
-                        else if ((keystates[3] & 128))
-                        { // quit demo, start 2 player game
-                            return 2;
-                        }
-                        else
-                            return 3;
-                    }
-                    v = RIA.vsync;
-                    break;
-                }
-            }
-        }
-    }
+    RIA.step1 = 1;
+    for (i = 0; i < KEYBOARD_BYTES; i++)
+        keystates[i] = RIA.rw1;
 }
 
-static void delay(unsigned tenths_of_seconds)
+// Wait for N vsync ticks, polling keyboard each tick.
+// Returns: 0=timeout, 1=KEY_1 pressed, 2=KEY_2 pressed, 3=other key pressed
+unsigned char delay_with_input(unsigned ticks)
 {
-    unsigned i, j, k;
-    static uint8_t v;
-    v = RIA.vsync;
-    for (k = 0; k < tenths_of_seconds; k++)
-    { // seconds loop
-        for (j = 0; j < 1; j++)
-        { // 1/60th of a second loop
-            for (i = 0; i < 2548; i++)
-            { // loop until vsync is incremented
-                if (v != RIA.vsync)
-                {
-                    v = RIA.vsync;
-                    break;
-                }
-            }
-        }
-    }
-}
-
-unsigned char new_wait()
-{ // wait until key is pressed
-    unsigned char tempz;
-    RIA.addr0 = KEYBOARD_INPUT;
-    RIA.step0 = 0;
-    while (1)
+    unsigned di;
+    static uint8_t dv;
+    dv = RIA.vsync;
+    for (di = 0; di < ticks; di++)
     {
-        tempz = RIA.rw0 & 1;
-        if (!tempz)
+        while (dv == RIA.vsync)
+            ;
+        dv = RIA.vsync;
+        read_keystates();
+        if (!(keystates[0] & 1)) // any key pressed?
         {
-            return 1;
+            if (key(KEY_1)) return 1;
+            if (key(KEY_2)) return 2;
+            return 3;
         }
     }
+    return 0;
 }
 
-// static void wait()
-// {
-//     uint8_t discard;
-//     discard = RIA.rx;
-//     while (RIA.ready & RIA_READY_RX_BIT)
-//         discard = RIA.rx;
-//     while (!(RIA.ready & RIA_READY_RX_BIT))
-//         ;
-//     discard = RIA.rx;
-// }
+// Delay that acts on coin-insert (KEY_1/KEY_2) by setting demo_terminated.
+// Use during gameplay screens (game over, wave completed, round transitions).
+// Returns: true if coin was inserted
+bool coin_delay(unsigned ticks)
+{
+    unsigned char result = delay_with_input(ticks);
+    if (result == 1)
+    {
+        demo_terminated = true;
+        Game.num_players = 0;
+        Game.play_mode = true;
+        return true;
+    }
+    if (result == 2)
+    {
+        demo_terminated = true;
+        Game.num_players = 1;
+        Game.play_mode = true;
+        return true;
+    }
+    return false;
+}
 
 // clear entire character screen
 // each char position has 3 bytes --> the character, fg color, bg color
@@ -484,7 +452,7 @@ unsigned char print_string(unsigned row, unsigned col, char *str, bool slow)
         RIA.rw0 = *str++;
         if (slow)
         {
-            skip = new_delay(6);
+            skip = delay_with_input(6);
             if (skip)
                 return 1;
         }
@@ -740,37 +708,23 @@ void restore_bunkers(unsigned char active_player)
 
 void update_numerical_lives(bool blink_lives, unsigned char num_of_lives_remaining)
 {
-    unsigned char blink_cycles, skip;
+    unsigned char blink_cycles;
+    unsigned char col = (active_player == 1) ? 34 : 5;
     strcpy(lives_num_str, " ");
     lives_num_str[0] = (char)num_of_lives_remaining + '0';
     if (blink_lives)
     {
         for (blink_cycles = 0; blink_cycles < 10; blink_cycles++)
         {
-            if (active_player == 1)
-            {
-                print_string(29, 34, " ", false);
-                skip = new_delay(10);
-                print_string(29, 34, lives_num_str, false);
-                skip = new_delay(10);
-            }
-            else
-            {
-                print_string(29, 5, " ", false);
-                skip = new_delay(10);
-                print_string(29, 5, lives_num_str, false);
-                skip = new_delay(10);
-            }
-            if (skip)
-                return;
+            print_string(29, col, " ", false);
+            if (delay_with_input(10)) return;
+            print_string(29, col, lives_num_str, false);
+            if (delay_with_input(10)) return;
         }
     }
     else
     {
-        if (active_player == 1)
-            print_string(29, 34, lives_num_str, false);
-        else
-            print_string(29, 5, lives_num_str, false);
+        print_string(29, col, lives_num_str, false);
     }
 }
 
@@ -1079,28 +1033,7 @@ void load_freq_to_ria(unsigned addr, unsigned freq)
     RIA.rw0 = (freq >> 8) & 0xFF;
 }
 
-// Check if demo was terminated by player input during a delay.
-// Returns true if demo was terminated (caller should break/continue to restart).
-bool check_demo_termination(unsigned char delay_ticks)
-{
-    temp1 = new_delay(delay_ticks);
-    if (temp1 == 1)
-    {
-        demo_terminated = true;
-        Game.num_players = 0;
-        Game.play_mode = true;
-        return true;
-    }
-    else if (temp1 == 2)
-    {
-        demo_terminated = true;
-        Game.num_players = 1;
-        Game.play_mode = true;
-        return true;
-    }
-    temp1 = 0;
-    return false;
-}
+
 
 // Move a bomb downward: update position, bbox, animation, step count
 void bomb_move(unsigned char bomb_idx, unsigned char bbox_y0)
@@ -1308,22 +1241,10 @@ static void splash_and_input(void)
     xreg_vga_mode(4, 0, SPR_CFG_BASE, TOTAL_NUM_SPR); // setup sprite mode in plane 0
     // first clear screen
     initialize_char_screen();
-    delay(90); // this appears to be necessary to give the OS a chance to finish it's business before
-               // ... displaying anything
-
-    // ######################################
-    // ########  Keyboard operation  ########
-    //      first, read 32 bytes of key state data from xram keyboard structure (currently at 0xFF10 to 0xFF2F)
-    //      check first byte for LSBit = 0, indicating key has been pressed
-    //      use this algorithm to find which bit of the 256 possible bits are set to '1'
-    //          key(code) (keystates[code >> 3] & (1 << (code & 7)))
-    //      by using the 'CODE' for the key of interest to find/check the bit in the array of 256 bits that represents the key
-    //      to see if it's a '1'
-    // KEY PRESSES
-    // 1 = 1 player, 2 = 2 players, d = demo mode, < = gunner left, > = right, space or up or down arrow = fire, p = pause, S = save game
-    // Turn on USB keyboard I/O
-    xreg_ria_keyboard(KEYBOARD_INPUT); // keyboard data is at 0xFF10
-    xreg(0, 0, 2, 0xFF80U);            // gamepad TODO use xreg_ria_gamepad(0xFF80U) after cc65 updates
+    // Turn on USB keyboard and gamepad I/O (must be before any delay_with_input calls)
+    xreg_ria_keyboard(KEYBOARD_INPUT);
+    xreg(0, 0, 2, 0xFF80U);
+    delay_with_input(90); // give the OS a chance to finish before displaying
 
     paused = false, handled_key = false;
 
@@ -1350,10 +1271,10 @@ static void splash_and_input(void)
                 break; // use 'slow' to flag text that should be printed slowly
             if (print_string(10, 13, "SPACE RAIDERS", slow))
                 break;
-            new_delay(70); // for dramatic effect
+            delay_with_input(70); // for dramatic effect
             if (print_string(14, 12, "*SCORING TABLE*", !slow))
                 break;
-            new_delay(70);
+            delay_with_input(70);
             // unlike orig display and text to the right of it, one row at a time
             ptr = SPR_CFG_BASE + (5 * sizeof(vga_mode4_sprite_t));
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, 124);
@@ -1393,49 +1314,24 @@ static void splash_and_input(void)
     } // END SPLASH SCREEN WHILE LOOP
 
     // pause for input for a couple seconds, if no input, move on with default = 'demo mode'
-    new_delay(180); // pause for input for a couple seconds, if none move on with default = 'demo mode'
+    delay_with_input(180); // pause for input for a couple seconds, if none move on with default = 'demo mode'
 
-    // ############   GET KEYBOARD INPUT   ##############
-    // ##################################################
-    RIA.addr0 = KEYBOARD_INPUT;
-    RIA.step0 = 1;
-    while (!handled_key)
-    {
-        for (i = 0; i < KEYBOARD_BYTES; i++)
-            keystates[i] = RIA.rw0;
-        if (!handled_key && (keystates[2] & 8))
-        { // pause
-            paused = !paused;
-        }
-        else if (!handled_key && key(KEY_R))
-        { // UNUSED restart game0
-        }
-        else if (!handled_key && key(KEY_D))
-        { // demo mode
-            // Demo is the default this just allows us to start the demo on command instead of waiting for delay
-            Game.play_mode = false;
-            Game.num_players = 1;
-            break;
-        }
-        else if (!handled_key && key(KEY_X))
-        { // eXtended demo mode
-            // not used
-            printf("switch to extended DEMO mode for DEBUG\n");
-            break;
-        }
-        else if (!handled_key && key(KEY_1))
-        { // play mode - 1 player
-            Game.num_players = 0;
-            Game.play_mode = true;
-            break;
-        }
-        else if (!handled_key && key(KEY_2))
-        {                         // play mode - 2 players
-            Game.num_players = 1; // "1" means there are 2 players
-            Game.play_mode = true;
-            break;
-        }
-        handled_key = true;
+    // Get player selection from keyboard
+    read_keystates();
+    if (key(KEY_D))
+    { // demo mode (default if no input during delay)
+        Game.play_mode = false;
+        Game.num_players = 1;
+    }
+    else if (key(KEY_1))
+    { // 1 player
+        Game.num_players = 0;
+        Game.play_mode = true;
+    }
+    else if (key(KEY_2))
+    { // 2 players
+        Game.num_players = 1;
+        Game.play_mode = true;
     }
 }
 
@@ -1561,7 +1457,7 @@ static void game_init(void)
     {
         print_string(6, 14, "  READY?  ", !slow);
     }
-    if (check_demo_termination(120))
+    if (coin_delay(120))
         return;
     print_string(6, 14, "          ", !slow);
 
@@ -1737,7 +1633,7 @@ static void game_init(void)
     // #######  SoundFX initialization   #######
     // #########################################
     xreg(0, 1, 0x00, 0xFFFF); // turn off PSG
-    delay(30);
+    coin_delay(30);
     xreg(0, 1, 0x00, SFX_BASE_ADDR); // initialize PSG... set base address of xregs
 
     // Sound FX VARS
@@ -1967,7 +1863,7 @@ static void control_loop(void)
             silence_all_sfx();
             // reset PSG
             xreg(0, 1, 0x00, 0xFFFF); // turn off PSG
-            delay(30);
+            coin_delay(30);
             xreg(0, 1, 0x00, SFX_BASE_ADDR); // initialize PSG... set base address of xregs
 
             // check for another player
@@ -1988,24 +1884,10 @@ static void control_loop(void)
                             print_string(27, 17, "1> GAME OVER", !slow);
                         else
                             print_string(27, 17, "2> GAME OVER", !slow);
-                        // new_delay (180);
-                        temp1 = new_delay(180);
+                        coin_delay(180);
                         print_string(27, 8, "                      ", !slow);
-                        if (temp1 == 1)
-                        {
-                            demo_terminated = true;
-                            Game.num_players = 0;
-                            Game.play_mode = true;
+                        if (demo_terminated)
                             break;
-                        }
-                        else if (temp1 == 2)
-                        {
-                            demo_terminated = true;
-                            Game.num_players = 1;
-                            Game.play_mode = true;
-                            break;
-                        }
-                        temp1 = 0;
                         print_string(27, 9, "                          ", !slow);
                     }
                     // ##### FULL GAME OVER #####
@@ -2019,21 +1901,8 @@ static void control_loop(void)
                         ptr = SPR_CFG_BASE + (SAUCER_EXPLOS_FIRST_SPR_NUM * sizeof(vga_mode4_sprite_t));
                         xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, SAUCER_BASE_X);
                         print_string(5, 15, "GAME OVER", slow);
-                        temp1 = new_delay(180);
+                        coin_delay(180);
                         print_string(5, 14, "          ", !slow);
-                        if (temp1 == 1)
-                        {
-                            demo_terminated = true;
-                            Game.num_players = 0;
-                            Game.play_mode = true;
-                        }
-                        else if (temp1 == 2)
-                        {
-                            demo_terminated = true;
-                            Game.num_players = 1;
-                            Game.play_mode = true;
-                        }
-                        temp1 = 0;
                         // update hiscore file
                         fptr = fopen("raiders.hiscore", "wb+");
                         fwrite(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
@@ -2080,7 +1949,8 @@ static void control_loop(void)
                 print_string(9, 10, "WAVE     COMPLETED!", !slow);
                 update_wave_number(true); // true = print at top of screen, false bottom
                 update_wave_number(false);
-                delay(240);
+                if (coin_delay(240))
+                    break;
                 print_string(6, 5, "                              ", !slow);
                 print_string(9, 5, "                              ", !slow);
 
@@ -2452,11 +2322,10 @@ static void handle_keyboard(void)
     // ############################################
     // ############  KEYBOARD INPUT  ##############
     // ############################################
-    // get keybd input for shoot, right, left, pause, restart, quit
-    // every tick read specific bytes from keyboard data structure @ 0xFF10
+    // Get keyboard and gamepad input for shoot, move, pause, restart, quit
     do
     {
-        // GAMEPAD input
+        // Gamepad input
         {
             int bits;
             RIA.step0 = 1;
@@ -2472,81 +2341,62 @@ static void handle_keyboard(void)
                 Gunner.direction_left = false;
                 Gunner.direction_right = true;
             }
-            if (RIA.rw0 & 0x3F) // Any button shoots
-            {
+            if (RIA.rw0 & 0x3F) // any button shoots
                 Gunner.shoot = true;
-            }
         }
-        if (current_time % 1 == 0)
+
+        // Keyboard input
+        read_keystates();
+        if (!(keystates[0] & 1)) // any key pressed?
         {
-            RIA.addr0 = KEYBOARD_INPUT;
-            RIA.step0 = 2;
-            keystates[0] = RIA.rw0;
-            RIA.step0 = 1;
-            keystates[2] = RIA.rw0;
-            RIA.step0 = 2;
-            keystates[3] = RIA.rw0;
-            RIA.step0 = 4;
-            keystates[5] = RIA.rw0;
-            RIA.step0 = 0;
-            keystates[9] = RIA.rw0;
-            // don't knpw why but have to reset address or add delay to make it (reading 10) work
-            // From Rumbledethumps: this is cc65 bug, it's ignoring volatile, see raiders.c.obj.s
-            RIA.addr0 = KEYBOARD_INPUT + 10;
-            keystates[10] = RIA.rw0;
-        }
-        // amy key pressed? (determined by LSBit of first byte = 0)
-        if (!(keystates[0] & 1))
-        { // which one?
-            // direction and firing are set here, then reset in Gunner MOVE and Bullet SPAWN sections
-            if (!paused && (keystates[9] & 128) && !(keystates[10] & 1))
-            { // move ship right
+            // Movement
+            if (!paused && key(KEY_RIGHT) && !key(KEY_LEFT))
+            {
                 Gunner.direction_right = true;
                 Gunner.direction_left = false;
             }
-            if (!paused && (keystates[10] & 1) && !(keystates[9] & 128))
-            { // move ship left
+            if (!paused && key(KEY_LEFT) && !key(KEY_RIGHT))
+            {
                 Gunner.direction_left = true;
                 Gunner.direction_right = false;
             }
-            // 3 keys can be used to fire bullets
-            if (!Gunner.shoot)
+            // Fire (space, up, or down)
+            if (!Gunner.shoot && !paused)
             {
-                if (!paused && (keystates[10] & 4) || (keystates[10] & 2) || (keystates[5] & 16))
-                { // shoot
+                if (key(KEY_UP) || key(KEY_DOWN) || key(KEY_SPACE))
                     Gunner.shoot = true;
-                }
-            } // else Gunner.shoot = false;
+            }
+            // System keys (one-shot via handled_key debounce)
             if (!handled_key)
             {
-                if ((keystates[2] & 8))
+                if (key(KEY_P))
                 { // pause
                     paused = !paused;
+                    // wait for key release
                     RIA.addr0 = KEYBOARD_INPUT;
                     RIA.step0 = 0;
                     while (!(RIA.rw0 & 1))
-                    {
-                    }
+                        ;
                 }
-                else if ((keystates[2] & 32))
-                { // restart game
+                else if (key(KEY_R))
+                {
                     Game.restart = true;
                 }
-                else if ((keystates[3] & 8))
-                { // do demo mode immediately
+                else if (key(KEY_X))
+                {
                     printf("switch to extended DEMO mode for DEBUG\n");
                     break;
                 }
-                else if ((keystates[3] & 64))
-                { // quit demo, start 1 player game
+                else if (key(KEY_1))
+                { // start 1 player game
                     demo_terminated = true;
                     Game.num_players = 0;
                     Game.play_mode = true;
                     Game.restart = true;
                     break;
                 }
-                else if ((keystates[3] & 128))
-                { // quit demo, start 2 player game
+                else if (key(KEY_2))
+                { // start 2 player game
                     demo_terminated = true;
                     Game.num_players = 1;
                     Game.play_mode = true;
@@ -2554,16 +2404,13 @@ static void handle_keyboard(void)
                     break;
                 }
                 handled_key = true;
-                keystates[2] = 0;
-                keystates[5] = 0;
-                keystates[3] = 0;
             }
             else
-            { // no keys down
+            {
                 handled_key = false;
             }
         }
-    } while (paused); // hang out here if 'pause" (P) is pressed, until it's pressed again
+    } while (paused);
 }
 
 static void bullet_move_spawn(void)
