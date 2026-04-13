@@ -3061,6 +3061,7 @@ static void gunner_move_spawn(void)
             Gunner.x = GUNNER_P1_X_BASE;
             gunner_image_ptr = GUNNER_IMG_FOR_PLAYER(active_player);
             Bullet.reload = 1;
+            Gunner.shoot = false;
             Gunner.state = GUNNER_ALIVE;
             Saucer.next_spawn_time = SAUCER_SPAWN_TIME; // s/b SAUCER_SPAWN_TIME;
             Saucer.spawn_enable = false;
