@@ -354,9 +354,9 @@ void read_keystates(void)
 // Byte 2: BTN0 (bit 0=A, 1=B, 2=C, 3=X, 4=Y, 5=Z, 6=L1, 7=R1)
 // Byte 3: BTN1 (bit 0=L2, 1=R2, 2=Select, 3=Start, 4=Home, 5=L3, 6=R3)
 // Bytes 4-9: analog sticks and triggers
-#define GAMEPAD_SIZE       10   // bytes per gamepad in XRAM
-#define GAMEPAD_CONNECTED  0x80 // byte 0 bit 7
-#define GAMEPAD_BTN_START  0x08 // byte 3 bit 3
+#define GAMEPAD_SIZE 10         // bytes per gamepad in XRAM
+#define GAMEPAD_CONNECTED 0x80  // byte 0 bit 7
+#define GAMEPAD_BTN_START 0x08  // byte 3 bit 3
 #define GAMEPAD_BTN_SELECT 0x04 // byte 3 bit 2
 
 // Check for coin insert (KEY_1, KEY_2, gamepad start/select).
@@ -379,16 +379,19 @@ unsigned char check_coin(void)
     if (gp_btn1 & (GAMEPAD_BTN_START | GAMEPAD_BTN_SELECT))
         return 2;
     // Keyboard 1/2
-    if (key(KEY_1)) return 1;
-    if (key(KEY_2)) return 2;
+    if (key(KEY_1))
+        return 1;
+    if (key(KEY_2))
+        return 2;
     return 0;
 }
 
 // Act on a coin insert: set demo_terminated and game config.
-// Returns true if coin was inserted.
+// Only responds to 1 (1P) or 2 (2P), ignores 0 (timeout) and 3 (other key).
 bool act_on_coin(unsigned char coin)
 {
-    if (coin == 0) return false;
+    if (coin != 1 && coin != 2)
+        return false;
     demo_terminated = true;
     Game.num_players = (coin == 2) ? 1 : 0;
     Game.play_mode = true;
@@ -410,9 +413,8 @@ unsigned char delay_with_input(unsigned ticks)
         dv = RIA.vsync;
         read_keystates();
         coin = check_coin();
-        if (coin) return coin;
-        if (!(keystates[0] & 1))
-            return 3; // non-coin key pressed
+        if (coin)
+            return coin;
     }
     return 0;
 }
@@ -747,9 +749,11 @@ void update_numerical_lives(bool blink_lives, unsigned char num_of_lives_remaini
         for (blink_cycles = 0; blink_cycles < 10; blink_cycles++)
         {
             print_string(29, col, " ", false);
-            if (delay_with_input(10)) return;
+            if (delay_with_input(10))
+                return;
             print_string(29, col, lives_num_str, false);
-            if (delay_with_input(10)) return;
+            if (delay_with_input(10))
+                return;
         }
     }
     else
@@ -1062,8 +1066,6 @@ void load_freq_to_ria(unsigned addr, unsigned freq)
     RIA.rw0 = freq & 0xFF;
     RIA.rw0 = (freq >> 8) & 0xFF;
 }
-
-
 
 // Move a bomb downward: update position, bbox, animation, step count
 void bomb_move(unsigned char bomb_idx, unsigned char bbox_y0)
