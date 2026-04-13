@@ -116,110 +116,106 @@ typedef enum {
 
 // ####  BUNKER  ####
 // NOTE: each sprite image is eaten away by colors being changed to transparent...
-//      based on bomb/bullet blast pattern being AND'd with bunkr sprite image (zeroes are tansparent, 0xFF no change to color)
-//      4 images per player plus one restoration copy, but only 4 sprites for visible Military bunkrs, ID # are 0 thru 3
+//      based on bomb/bullet blast pattern being AND'd with bunker sprite image (zeroes are transparent, 0xFF no change to color)
+//      4 images per player plus one restoration copy, but only 4 sprites for visible Military bunkers, ID # are 0 thru 3
 // during game time, the proper set of 4 bunker images is pointed to by the 4 sprite img ptrs, based on active player #
-#define NUM_OF_BUNKR_SPR 4
-#define BUNKR_FIRST_SPR_NUM 0                   // first sprite config is number 0, last bunker sprite is 3
+#define NUM_OF_BUNKER_SPR 4
+#define BUNKER_FIRST_SPR_NUM 0                   // first sprite config is number 0, last bunker sprite is 3
 // IMAGES
-#define NUM_OF_BUNKR_IMGS 9
-#define BUNKR_IMG_BASE   SPR_IMG_BASE           // base address of Military bunkr Image
+#define NUM_OF_BUNKER_IMGS 9
+#define BUNKER_IMG_BASE   SPR_IMG_BASE           // base address of Military bunker Image
 
-#define BUNKR_PRISTINE_IMG_BASE   BUNKR_IMG_BASE
-#define BUNKR_IMG_SIZE   SPR_32X32_SIZE         // 32 x 32 = 0x0400
+#define BUNKER_PRISTINE_IMG_BASE   BUNKER_IMG_BASE
+#define BUNKER_IMG_SIZE   SPR_32X32_SIZE         // 32 x 32 = 0x0400
 
-#define BUNKR_IMG_BUF   (SPR_32X32_SIZE * NUM_OF_BUNKR_IMGS)       // Total size of bunkr image buffer
+#define BUNKER_IMG_BUF   (SPR_32X32_SIZE * NUM_OF_BUNKER_IMGS)       // Total size of bunker image buffer
 
-#define BUNKR_0_PLYR1_IMG_BUF  (BUNKR_IMG_BASE + SPR_32X32_SIZE)
-#define BUNKR_1_PLYR1_IMG_BUF  (BUNKR_0_PLYR1_IMG_BUF + SPR_32X32_SIZE)
-#define BUNKR_2_PLYR1_IMG_BUF  (BUNKR_1_PLYR1_IMG_BUF + SPR_32X32_SIZE)
-#define BUNKR_3_PLYR1_IMG_BUF  (BUNKR_2_PLYR1_IMG_BUF + SPR_32X32_SIZE)
+#define BUNKER_0_PLYR1_IMG_BUF  (BUNKER_IMG_BASE + SPR_32X32_SIZE)
+#define BUNKER_1_PLYR1_IMG_BUF  (BUNKER_0_PLYR1_IMG_BUF + SPR_32X32_SIZE)
+#define BUNKER_2_PLYR1_IMG_BUF  (BUNKER_1_PLYR1_IMG_BUF + SPR_32X32_SIZE)
+#define BUNKER_3_PLYR1_IMG_BUF  (BUNKER_2_PLYR1_IMG_BUF + SPR_32X32_SIZE)
 
-#define BUNKR_0_PLYR2_IMG_BUF  (BUNKR_0_PLYR1_IMG_BUF + (4 * SPR_32X32_SIZE))
-#define BUNKR_1_PLYR2_IMG_BUF  (BUNKR_0_PLYR2_IMG_BUF + SPR_32X32_SIZE)
-#define BUNKR_2_PLYR2_IMG_BUF  (BUNKR_1_PLYR2_IMG_BUF + SPR_32X32_SIZE)
-#define BUNKR_3_PLYR2_IMG_BUF  (BUNKR_2_PLYR2_IMG_BUF + SPR_32X32_SIZE)
+#define BUNKER_0_PLYR2_IMG_BUF  (BUNKER_0_PLYR1_IMG_BUF + (4 * SPR_32X32_SIZE))
+#define BUNKER_1_PLYR2_IMG_BUF  (BUNKER_0_PLYR2_IMG_BUF + SPR_32X32_SIZE)
+#define BUNKER_2_PLYR2_IMG_BUF  (BUNKER_1_PLYR2_IMG_BUF + SPR_32X32_SIZE)
+#define BUNKER_3_PLYR2_IMG_BUF  (BUNKER_2_PLYR2_IMG_BUF + SPR_32X32_SIZE)
 
-// math is bnkr image offset is 5, bnkr width = 22, space between = 22, 320 is screen width, so (320-4*22-3*22-2*5)/2 = ???
+// math: bunker image offset is 5, bunker width = 22, space between = 22, 320 is screen width, so (320-4*22-3*22-2*5)/2 = 6
 
 // POSITIONS/BOUNDING BOXES
 // DID THE RESEARCH given my layout is 240 tall and original is 256, removed top and bottom blank lines
 // ... with this GUNNER and BUNKERS move up 8, bunker to 176
-//#define BUNKR_Y (192 - 8)       // -8 due to image offset change from y0 = y + 0 to y + 8
-#define BUNKR_Y (192 - 8 - 8)       // -8 due to image offset change from y0 = y + 0 to y + 8
-#define BUNKR_WIDTH 22          // width of displayed image
-#define BUNKR_FULL_WIDTH 32     // width (# of columns) of sprite image buffer
-#define BUNKR_GAP 23            // # px gap between visible bunker images
-#define BUNKR_X_SPACING  (BUNKR_WIDTH + BUNKR_GAP)     // 22 (visible) bunker, 23 space between bunkers = 45 left edge to left edge
-#define BUNKR_ZERO_X 76         // full sprite x, left side = 76, right 77 since first bunker left edge to last bunker right edge is 157 (odd #)
-#define BUNKR_ZERO_X0  (BUNKR_ZERO_X + 5)     // bunker image is offset 5 from left edge of 32x32 sprite
-#define BUNKR_ZERO_X1  (BUNKR_ZERO_X + 27)    // width of image = 22, right edge is 22 + 5 from left edge of sprite
+#define BUNKER_Y (192 - 8 - 8)       // -8 due to image offset change from y0 = y + 0 to y + 8
+#define BUNKER_WIDTH 22          // width of displayed image
+#define BUNKER_FULL_WIDTH 32     // width (# of columns) of sprite image buffer
+#define BUNKER_GAP 23            // # px gap between visible bunker images
+#define BUNKER_X_SPACING  (BUNKER_WIDTH + BUNKER_GAP)     // 22 (visible) bunker, 23 space between bunkers = 45 left edge to left edge
+#define BUNKER_ZERO_X 76         // full sprite x, left side = 76, right 77 since first bunker left edge to last bunker right edge is 157 (odd #)
+#define BUNKER_ZERO_X0  (BUNKER_ZERO_X + 5)     // bunker image is offset 5 from left edge of 32x32 sprite
+#define BUNKER_ZERO_X1  (BUNKER_ZERO_X + 27)    // width of image = 22, right edge is 22 + 5 from left edge of sprite
 
-#define BUNKR_MACRO_BBOX_Y1      (BUNKR_Y + 24)
+#define BUNKER_MACRO_BBOX_Y1      (BUNKER_Y + 24)
 
 // SAUCER EXPLOSION IMAGES
 #define NUM_OF_SAUCER_EXPLOS_SPR 1
-#define SAUCER_EXPLOS_FIRST_SPR_NUM   (BUNKR_FIRST_SPR_NUM + NUM_OF_BUNKR_SPR)    // s/b 4
+#define SAUCER_EXPLOS_FIRST_SPR_NUM   (BUNKER_FIRST_SPR_NUM + NUM_OF_BUNKER_SPR)    // s/b 4
 #define NUM_SAUCER_EXPLOS_IMGS    5
-#define SAUCER_MAGENTA_EXPLOS_IMG_BASE     (BUNKR_IMG_BASE + BUNKR_IMG_BUF)
+#define SAUCER_MAGENTA_EXPLOS_IMG_BASE     (BUNKER_IMG_BASE + BUNKER_IMG_BUF)
 #define SAUCER_SCORE50_IMG_BASE     (SAUCER_MAGENTA_EXPLOS_IMG_BASE + SPR_32X32_SIZE)
 #define SAUCER_SCORE100_IMG_BASE     (SAUCER_SCORE50_IMG_BASE + SPR_32X32_SIZE)
 #define SAUCER_SCORE150_IMG_BASE     (SAUCER_SCORE100_IMG_BASE + SPR_32X32_SIZE)
 #define SAUCER_SCORE300_IMG_BASE     (SAUCER_SCORE150_IMG_BASE + SPR_32X32_SIZE)
-// # define SAUCER_TYPE2_EXPLOS_IMG_BASE       (SAUCER_MAGENTA_EXPLOS_IMG_BASE + SPR_32X32_SIZE)
-# define SAUCER_EXPLOS_IMG_BUF  (NUM_SAUCER_EXPLOS_IMGS * SPR_32X32_SIZE)
+#define SAUCER_EXPLOS_IMG_BUF  (NUM_SAUCER_EXPLOS_IMGS * SPR_32X32_SIZE)
 
 // ####  ALIENS  ####
-// INVR SPRITES
+// INVADER SPRITES
 #define NUM_ALIEN_SPR 55                  // ID is 1 through 55
 #define ALIEN_FIRST_SPR_NUM   (SAUCER_EXPLOS_FIRST_SPR_NUM + NUM_OF_SAUCER_EXPLOS_SPR)      // SPRITE # for 1st alien sprite, s/b 5
-// INVR ANIMATION
-#define NUM_INVR_ANIM_SPR 3          // 3 types
-#define NUM_INVR_IMGS_PER 2          // each with 2 animation images
-// INVR IMAGES
-#define NUM_INVR_IMGS   (NUM_INVR_ANIM_SPR * NUM_INVR_IMGS_PER)
-#define INVR_IMG_BASE   (SAUCER_MAGENTA_EXPLOS_IMG_BASE + SAUCER_EXPLOS_IMG_BUF)
-#define INVR_IMG_BUF    (SPR_16X16_SIZE * NUM_INVR_IMGS)
-#define INVR_IMG_GREENIE    INVR_IMG_BASE
-#define INVR_IMG_GREENIE_0    INVR_IMG_BASE
-#define INVR_IMG_GREENIE_1    (INVR_IMG_BASE + SPR_16X16_SIZE)
-#define INVR_IMG_BLUIE    (INVR_IMG_BASE + (2 * SPR_16X16_SIZE))
-#define INVR_IMG_BLUIE_0    (INVR_IMG_BASE + (2 * SPR_16X16_SIZE))
-#define INVR_IMG_BLUIE_1    (INVR_IMG_BASE + (3 * SPR_16X16_SIZE))
-#define INVR_IMG_MAGENTAIE    (INVR_IMG_BASE + (4 * SPR_16X16_SIZE))
-#define INVR_IMG_MAGENTAIE_0    (INVR_IMG_BASE + (4 * SPR_16X16_SIZE))
-#define INVR_IMG_MAGENTAIE_1    (INVR_IMG_BASE + (5 * SPR_16X16_SIZE))
+// INVADER ANIMATION
+#define NUM_INVADER_ANIM_SPR 3          // 3 types
+#define NUM_INVADER_IMGS_PER 2          // each with 2 animation images
+// INVADER IMAGES
+#define NUM_INVADER_IMGS   (NUM_INVADER_ANIM_SPR * NUM_INVADER_IMGS_PER)
+#define INVADER_IMG_BASE   (SAUCER_MAGENTA_EXPLOS_IMG_BASE + SAUCER_EXPLOS_IMG_BUF)
+#define INVADER_IMG_BUF    (SPR_16X16_SIZE * NUM_INVADER_IMGS)
+#define INVADER_IMG_ALIEN_GREEN    INVADER_IMG_BASE
+#define INVADER_IMG_ALIEN_GREEN_0    INVADER_IMG_BASE
+#define INVADER_IMG_ALIEN_GREEN_1    (INVADER_IMG_BASE + SPR_16X16_SIZE)
+#define INVADER_IMG_ALIEN_BLUE    (INVADER_IMG_BASE + (2 * SPR_16X16_SIZE))
+#define INVADER_IMG_ALIEN_BLUE_0    (INVADER_IMG_BASE + (2 * SPR_16X16_SIZE))
+#define INVADER_IMG_ALIEN_BLUE_1    (INVADER_IMG_BASE + (3 * SPR_16X16_SIZE))
+#define INVADER_IMG_ALIEN_MAGENTA    (INVADER_IMG_BASE + (4 * SPR_16X16_SIZE))
+#define INVADER_IMG_ALIEN_MAGENTA_0    (INVADER_IMG_BASE + (4 * SPR_16X16_SIZE))
+#define INVADER_IMG_ALIEN_MAGENTA_1    (INVADER_IMG_BASE + (5 * SPR_16X16_SIZE))
 
 // ALIEN MATRIX number of rows/columns,  pos, width, height in pixels of matrix
-#define NUM_INVR_ROWS 5
-#define NUM_INVR_COLS 11
-#define INVR_X_SPACING 16                // spacing from left edge of alien to left edge of next alien left edge
-#define INVR_Y_SPACING 16
+#define NUM_INVADER_ROWS 5
+#define NUM_INVADER_COLS 11
+#define INVADER_X_SPACING 16                // spacing from left edge of alien to left edge of next alien left edge
+#define INVADER_Y_SPACING 16
 
-// will need to change this to eliminate 2 rows since screen is supposed to be 256 but is only 240
-#define INVR_MTRX_START_X 64
-// TEST #define INVR_MTRX_START_X 40
+#define INVADER_MTRX_START_X 64
 
 // changed from 72 to 76... original's starting y (bottom of matrix) was 104 out of 240 px rows, 104 - 60 (height)
-#define INVR_MTRX_T_START_Y (56 - 4)
-#define INVR_MTRX_WIDTH 160     // width (x1 - x0) of the full matrix structure, irrespective of occupancy of aliens
-#define INV_MTRX_HEIGHT 64
-#define INVR_MTRX_LIMIT_LX 48   // x axis - furthest occupied matrix can travel to the left, right and y- axis for bottom limit
-#define INVR_MTRX_LIMIT_RX (320U - 48)
-#define INVR_MTRX_B_START_Y    (INVR_MTRX_T_START_Y + INV_MTRX_HEIGHT)
+#define INVADER_MTRX_T_START_Y (56 - 4)
+#define INVADER_MTRX_WIDTH 160     // width (x1 - x0) of the full matrix structure, irrespective of occupancy of aliens
+#define INVADER_MTRX_HEIGHT 64
+#define INVADER_MTRX_LIMIT_LX 48   // x axis - furthest occupied matrix can travel to the left, right and y- axis for bottom limit
+#define INVADER_MTRX_LIMIT_RX (320U - 48)
+#define INVADER_MTRX_B_START_Y    (INVADER_MTRX_T_START_Y + INVADER_MTRX_HEIGHT)
 // ALIEN BOUNDING BOXES per type
-#define INVR_BBOX_Y0 4
-#define INVR_BBOX_Y1 12
-#define INVR_GRN_BBOX_X0 4       // greenie (alien # 44 - 54)
-#define INVR_GRN_BBOX_X1 12
-#define INVR_BLU_BBOX_X0 2       // bluie (alien # 22 - 43)
-#define INVR_BLU_BBOX_X1 13
-#define INVR_MAG_BBOX_X0 2       // magentaie (alien 0 - 21)
-#define INVR_MAG_BBOX_X1 14
+#define INVADER_BBOX_Y0 4
+#define INVADER_BBOX_Y1 12
+#define INVADER_GRN_BBOX_X0 4       // green alien (# 44 - 54)
+#define INVADER_GRN_BBOX_X1 12
+#define INVADER_BLU_BBOX_X0 2       // blue alien (# 22 - 43)
+#define INVADER_BLU_BBOX_X1 13
+#define INVADER_MAG_BBOX_X0 2       // magenta alien (# 0 - 21)
+#define INVADER_MAG_BBOX_X1 14
 // ALIEN MOVEMENT & ANIMATION TIMING, EXPLOSION DURATION
 // x = 2 pixels/tick, y = 8 pixels per drop, explosion lasts 20 ticks
-#define INVR_X_INCR 2           // effectively speed 2px/tick
-#define INVR_DROP_RATE 8
+#define INVADER_X_INCR 2           // effectively speed 2px/tick
+#define INVADER_DROP_RATE 8
 // timed this on original, explos lasted 16 ticks, same as bullet/player short... #define ALIEN_EXPL_TICKS 20
 // counted ticks on original, it's 17
 #define ALIEN_EXPL_TICKS 17
@@ -234,7 +230,7 @@ typedef enum {
 // IMAGES
 #define NUM_SAUCER_IMGS     2   // for now MAGENTA and TYPE2 these are 16x16, there are two 32x32 explosions above
 #define SAUCER_IMG_BUF     (SPR_16X16_SIZE * NUM_SAUCER_IMGS)
-#define SAUCER_IMG_BASE     (INVR_IMG_BASE + INVR_IMG_BUF)
+#define SAUCER_IMG_BASE     (INVADER_IMG_BASE + INVADER_IMG_BUF)
 // POSITION/BOUNDING BOX
 #define SAUCER_BASE_X 320U   // off screen initially
 #define SAUCER_BASE_Y 40
@@ -257,21 +253,19 @@ typedef enum {
 // IMAGES
 // plyr1 blue with 2 explosion images, ditto ply2 yellow, plus bonus magenta gunner
 
-// FIX THIS gunner image should be 8 px tall, need to make the bottom (widest) section taller by 1 px
 #define NUM_GUNNER_IMG      6
 #define GUNNER_IMG_BASE     (SAUCER_IMG_BASE + SAUCER_IMG_BUF)
 #define GUNNER_IMG_BUF      (NUM_GUNNER_IMG * SPR_16X16_SIZE)
 #define GUNNER_PLYR1_IMG_BASE   ((uint16_t) GUNNER_IMG_BASE)
 #define GUNNER_PLYR2_IMG_BASE   (GUNNER_IMG_BASE + (3 * SPR_16X16_SIZE))
 #define GUNNER_IMG_FOR_PLAYER(p) ((p) ? GUNNER_PLYR2_IMG_BASE : GUNNER_PLYR1_IMG_BASE)
-// GUNNER STARTING POSIITIONS, BOUNDING BOX
+// GUNNER STARTING POSITIONS, BOUNDING BOX
 #define GUNNER_P1_X_BASE 55 // was 24
 #define GUNNER_P2_X_BASE (320U - 55 - 16)// temp for intial demo/test mode, 57 was 24
 
 // DID THE RESEARCH given my layout is 240 tall and original is 256, removed top and bottom blank lines
 // ... with this GUNNER and BUNKERS move up 8, gunner to 204
-//#define GUNNER_Y_BASE 212
-#define GUNNER_Y_BASE 212 - 8
+#define GUNNER_Y_BASE (212 - 8)
 #define GUNNER_BBOX_X0 1
 #define GUNNER_BBOX_X1 14
 // was 8, but should be 7 with proper sprite layout
@@ -280,16 +274,10 @@ typedef enum {
 // GUNNER SPEED/EXPLOSION DURATION
 #define GUNNER_EXPL_TICKS 90
 
-// TEMP TEST
-// supposedly its 1, but this player is updated twice per frame (every 120th of second)
-//#define GUNNER_SPEED 2
 #define GUNNER_SPEED 1
 
-// TO DO - need to init and update lives sprites as separate entities from gunner sprite which represent an active player
 // LIVES
 // SPRITES
-// TEMP converting from 6 to 8 sprites, total is now 74 SPRITES
-//#define NUM_LIVES_SPR 6     // 3 LIVE sprites per player, including 1 or 2 lives remaining, plus a potential bonus LIFE
 #define NUM_LIVES_SPR 8     // 4 LIVE sprites per player, including up to 3 initial lives, plus a potential bonus LIFE
 #define LIVES_FIRST_SPR_NUM     (GUNNER_FIRST_SPR_NUM + NUM_GUNNER_SPR)     // s/b 62
 // IMAGES
@@ -309,11 +297,11 @@ typedef enum {
 #define NUM_EXPLOS_SPR  0       // these are explosion images for existing sprites (alien, bullet, bomb)
 #define NUM_BIG_EXPL_IMG   1
 #define ALIEN_EXPL_IMG_BASE     (LIVES_BONUS_IMG_BASE + LIVES_BONUS_IMG_BUF)
-#define INVR_EXPL_IMG_BUF   SPR_16X16_SIZE
+#define INVADER_EXPL_IMG_BUF   SPR_16X16_SIZE
 #define NUM_SMALL_EXPL_IMG 2
-#define SMALL_EXPL_IMG_BASE    (ALIEN_EXPL_IMG_BASE + INVR_EXPL_IMG_BUF)
+#define SMALL_EXPL_IMG_BASE    (ALIEN_EXPL_IMG_BASE + INVADER_EXPL_IMG_BUF)
 #define SMALL_EXPL_IMG_BUF     (NUM_SMALL_EXPL_IMG * SPR_8X8_SIZE)
-#define BULLET_EXPL_IMG_BASE   (ALIEN_EXPL_IMG_BASE + INVR_EXPL_IMG_BUF)
+#define BULLET_EXPL_IMG_BASE   (ALIEN_EXPL_IMG_BASE + INVADER_EXPL_IMG_BUF)
 #define BOMB_EXPL_IMG_BASE   (BULLET_EXPL_IMG_BASE + SPR_8X8_SIZE)
 
 // ####  BULLET  ####
@@ -373,10 +361,9 @@ typedef enum {
 // DISPLAY DURATION
 #define SCORE_DISPLAY_TICKS 20
 
-// Note: BOMB SPEED is variable between 4 and 5 px per step
-// BASED ON???? see original behavior, I think speeds up when fewer than TBD aliens remain
+// Note: BOMB SPEED is variable between 4 and 5 px per step, speeds up when fewer than 9 aliens remain
 
-#define TOTAL_NUM_SPR (NUM_OF_BUNKR_SPR + NUM_OF_SAUCER_EXPLOS_SPR + NUM_ALIEN_SPR + NUM_SAUCER_SPR + NUM_GUNNER_SPR + NUM_LIVES_SPR + NUM_BULLET_SPR + NUM_BOMB_SPR)
+#define TOTAL_NUM_SPR (NUM_OF_BUNKER_SPR + NUM_OF_SAUCER_EXPLOS_SPR + NUM_ALIEN_SPR + NUM_SAUCER_SPR + NUM_GUNNER_SPR + NUM_LIVES_SPR + NUM_BULLET_SPR + NUM_BOMB_SPR)
 //#define TOTAL_NUM_SPR 72
 
 // For accessing the font library
