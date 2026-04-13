@@ -114,17 +114,7 @@ uint8_t keystates[KEYBOARD_BYTES] = {0};
 #define BUNKR_ZERO_X 76         // full sprite x, left side = 76, right 77 since first bunker left edge to last bunker right edge is 157 (odd #)
 #define BUNKR_ZERO_X0  (BUNKR_ZERO_X + 5)     // bunker image is offset 5 from left edge of 32x32 sprite
 #define BUNKR_ZERO_X1  (BUNKR_ZERO_X + 27)    // width of image = 22, right edge is 22 + 5 from left edge of sprite
-#define BUNKR_ONE_X0    (BUNKR_ZERO_X0 + BUNKR_X_SPACING)
-#define BUNKR_ONE_X1    (BUNKR_ZERO_X1 + BUNKR_X_SPACING)
-#define BUNKR_TWO_X0    (BUNKR_ONE_X0 + BUNKR_X_SPACING)
-#define BUNKR_TWO_X1    (BUNKR_ONE_X1 + BUNKR_X_SPACING)
-#define BUNKR_THREE_X0   (BUNKR_TWO_X0 + BUNKR_X_SPACING)
-#define BUNKR_THREE_X1   (BUNKR_TWO_X1 + BUNKR_X_SPACING)
-#define BUNKR_THREE_X1_PLUS16   (BUNKR_THREE_X1 + 16)
 
-#define BUNKR_MACRO_BBOX_X0      (BUNKR_ZERO_X + 5)
-#define BUNKR_MACRO_BBOX_X1      (BUNKR_ZERO_X + 27)
-#define BUNKR_MACRO_BBOX_Y0      (BUNKR_Y + 8)
 #define BUNKR_MACRO_BBOX_Y1      (BUNKR_Y + 24)
 
 // SAUCER EXPLOSION IMAGES
@@ -233,6 +223,7 @@ uint8_t keystates[KEYBOARD_BYTES] = {0};
 #define GUNNER_IMG_BUF      (NUM_GUNNER_IMG * SPR_16X16_SIZE)
 #define GUNNER_PLYR1_IMG_BASE   ((uint16_t) GUNNER_IMG_BASE)
 #define GUNNER_PLYR2_IMG_BASE   (GUNNER_IMG_BASE + (3 * SPR_16X16_SIZE))
+#define GUNNER_IMG_FOR_PLAYER(p) ((p) ? GUNNER_PLYR2_IMG_BASE : GUNNER_PLYR1_IMG_BASE)
 // GUNNER STARTING POSIITIONS, BOUNDING BOX
 #define GUNNER_P1_X_BASE 55 // was 24
 #define GUNNER_P2_X_BASE (320U - 55 - 16)// temp for intial demo/test mode, 57 was 24
