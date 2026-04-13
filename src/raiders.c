@@ -89,9 +89,9 @@ struct
     unsigned char alien_march_index;
 } Player[2];
 
-unsigned char Players_Alien_Exists[2][55];
-unsigned char Alien_width[55];     // Array to hold Width Constants for each specific alien
-unsigned int Alien_img_ptr[2][55]; // Array to hold 2 image pointers for all 55 aliens
+unsigned char players_alien_exists[2][55];
+unsigned char alien_width[55];     // Array to hold Width Constants for each specific alien
+unsigned int alien_img_ptr[2][55]; // Array to hold 2 image pointers for all 55 aliens
 
 struct
 {
@@ -164,7 +164,7 @@ struct
 {
     int x;
     unsigned image_ptr;
-} Saucer_Score;
+} saucer_score;
 
 // SOUND FX
 // 8 channels, 1 structure per channel, 8 bytes per structure, last byte of structure is unused
@@ -184,24 +184,24 @@ struct
 } Sfx[8];
 
 // Matrix Reference Alien's y-axis starting position table (index increments at level completion)
-static const unsigned char Mtrx_Y_Start[9] = {116, 140, 156, 164, 164, 164, 172, 172, 172};
+static const unsigned char mtrx_y_start[9] = {116, 140, 156, 164, 164, 164, 172, 172, 172};
 
 // SAUCER SCORING TABLE - index into this table is number of shots fired by gunner
 // these are all divided by 10, LSD is always zero
-static const unsigned Saucer_Score_Table[15] = {10, 5, 5, 10, 15, 10, 10, 5, 30, 10, 10, 10, 5, 15, 10};
+static const unsigned saucer_score_table[15] = {10, 5, 5, 10, 15, 10, 10, 5, 30, 10, 10, 10, 5, 15, 10};
 
 // COLUMN SEQUENCE TABLE for BOMB DROP
 // This is the "random" table of column #s, used to sequence columns of sawtooth and spike bombs, screw bombs drop
 // ... from the column the player is underneath
 // table index is 0 to 20, sawtooth bombs index starts 6 and goes to 20, spike starts at 0 and goes to 15
-static const unsigned char Bomb_Column_Sequ[21] = {0, 6, 0, 0, 0, 3, 10, 0, 5, 2, 0, 0, 10, 8, 1, 7, 1, 10, 3, 6, 9};
+static const unsigned char bomb_column_sequ[21] = {0, 6, 0, 0, 0, 3, 10, 0, 5, 2, 0, 0, 10, 8, 1, 7, 1, 10, 3, 6, 9};
 
 // ALIEN MARCH SFX RATE TABLES
 // 2 tables, 1 defines the threshold of the # of aliens remaining that is used to change MARCH SFX pulse rate
 //      the other table defines the pulse rate when the # of aliens is greater than the current threshold
-static const unsigned char Alien_March_SFX_Threshold[16] =
+static const unsigned char alien_march_sfx_threshold[16] =
     {0x32, 0x2B, 0x24, 0x1C, 0x16, 0x11, 0x0D, 0x0A, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01};
-static const unsigned char Alien_March_SFX_Rate[16] =
+static const unsigned char alien_march_sfx_rate[16] =
     {0x34, 0x2E, 0x27, 0x22, 0x1C, 0x18, 0x15, 0x13, 0x10, 0x0E, 0x0D, 0x0C, 0x0B, 0x09, 0x07, 0x05};
 
 // string declarations, with init values
@@ -258,8 +258,8 @@ unsigned char bullet_saucer_hit;
 unsigned char bullet_boundary_hit;
 
 // Bullet/Bomb overlap (shared by bullet_collision_detect + bomb_collision_detect)
-int ShotOverlapTop, ShotOverlapBottom, ShotColumn;
-int BombTopRow, BombRows;
+int shot_overlap_top, shot_overlap_bottom, shot_column;
+int bomb_top_row, bomb_rows;
 unsigned bomb_image_mem;
 
 // Bomb state (shared by bomb_move, bomb_move_spawn_all, bomb_collision_detect, etc.)
@@ -832,7 +832,7 @@ bool level_completed;
 
 // ALIEN HANDLER VARS
 unsigned char alien_num;
-bool Alien_update[55]; // updated (or not) state for each alien
+bool alien_update[55]; // updated (or not) state for each alien
 bool alien_ref_update; // toggles on each pass to distinguish which aliens match the current vs prior reference
 int alien_x, alien_y;
 unsigned char alien_hit; // flag indicating collision
@@ -847,18 +847,18 @@ bool alien_landed;
 signed char alien_y_incr;      // +0 or +8 (used to drop the alien matrix 8 px
 signed alien_ref_x;            // lower left reference pos of the alien matrix, uses byte arithm until sprite pos is updated
 signed alien_ref_y;            // ditto
-unsigned char Alien_rel_x[55]; // x/y position relative to ref x/y position
-signed char Alien_rel_y[55];
-unsigned char Alien_bbox_x0[55];
-unsigned char Alien_bbox_x1[55];
-unsigned char Alien_bbox_y0[55];
-unsigned char Alien_bbox_y1[55];
+unsigned char alien_rel_x[55]; // x/y position relative to ref x/y position
+signed char alien_rel_y[55];
+unsigned char alien_bbox_x0[55];
+unsigned char alien_bbox_x1[55];
+unsigned char alien_bbox_y0[55];
+unsigned char alien_bbox_y1[55];
 unsigned char alien_row_num; // alien matrix vars
 unsigned char alien_col_num;
 unsigned char alien_col_bomb_0;                     // col # selected for dropping bomb 0 (targeted bmmb)
 unsigned char alien_num_to_drop_bomb_from;          // col # selected for dropping bomb 1 and 2 (per column table)
-unsigned char Alien_unoccupied_rows_per_col[2][11]; // for each of the 11 cols, # of unoccupied rows is between 0 and 5, 5 = not occupied
-unsigned char Alien_unoccupied_cols_per_row[2][5];  // for each of 5 rows, # of unoccupied cols is between 0 and 11, 11 = not occupied
+unsigned char alien_unoccupied_rows_per_col[2][11]; // for each of the 11 cols, # of unoccupied rows is between 0 and 5, 5 = not occupied
+unsigned char alien_unoccupied_cols_per_row[2][5];  // for each of 5 rows, # of unoccupied cols is between 0 and 11, 11 = not occupied
 int alien_1st_col_abs_x;                            // absolute screen x/y position
 int alien_last_col_abs_x;
 unsigned char alien_anim; // animation sequ #
@@ -871,16 +871,16 @@ unsigned char alien_march_sfx_timer;
 // ####################################################################################################
 
 // Bunker image base address lookup tables
-static const unsigned Bunker_plyr1_img[4] = {
+static const unsigned bunker_plyr1_img[4] = {
     BUNKER_0_PLYR1_IMG_BUF, BUNKER_1_PLYR1_IMG_BUF,
     BUNKER_2_PLYR1_IMG_BUF, BUNKER_3_PLYR1_IMG_BUF};
-static const unsigned Bunker_plyr2_img[4] = {
+static const unsigned bunker_plyr2_img[4] = {
     BUNKER_0_PLYR2_IMG_BUF, BUNKER_1_PLYR2_IMG_BUF,
     BUNKER_2_PLYR2_IMG_BUF, BUNKER_3_PLYR2_IMG_BUF};
 
 // Binary search through 4 bunkers to find which one (if any) delta_x falls within.
 // Sets bunker_img_base_addr and adjusts delta_x to be relative to the matched bunker.
-// right_margin: width of the object (22 for bullet/bomb, 22+Alien_width for alien)
+// right_margin: width of the object (22 for bullet/bomb, 22+alien_width for alien)
 // Returns: 0-3 = bunker found, 4 = no bunker
 unsigned char find_bunker_for_x(unsigned char right_margin)
 {
@@ -912,7 +912,7 @@ unsigned char find_bunker_for_x(unsigned char right_margin)
     }
     if (bn < 4)
     {
-        bunker_img_base_addr = (1 - active_player) * Bunker_plyr1_img[bn] + active_player * Bunker_plyr2_img[bn];
+        bunker_img_base_addr = (1 - active_player) * bunker_plyr1_img[bn] + active_player * bunker_plyr2_img[bn];
     }
     return bn;
 }
@@ -997,11 +997,11 @@ void bomb_move(unsigned char bomb_idx, unsigned char bbox_y0)
 bool bomb_spawn_from_column(unsigned char bomb_idx, unsigned char col, int spawn_x, unsigned char bbox_y0)
 {
     alien_num_to_drop_bomb_from = col;
-    if (Alien_unoccupied_rows_per_col[active_player][col] >= 5)
+    if (alien_unoccupied_rows_per_col[active_player][col] >= 5)
         return false;
     for (i = 0; i < 5; i++)
     {
-        if ((Players_Alien_Exists[active_player][alien_num_to_drop_bomb_from] == 0) ||
+        if ((players_alien_exists[active_player][alien_num_to_drop_bomb_from] == 0) ||
             ((alien_hit > 0) && (hit_alien_idx == alien_num_to_drop_bomb_from)))
         {
             alien_num_to_drop_bomb_from += 11;
@@ -1307,7 +1307,7 @@ static void init_player_state(void)
     {
         for (i = 0; i < 55; i++)
         {
-            Players_Alien_Exists[j][i] = 1;
+            players_alien_exists[j][i] = 1;
         }
     }
     // Used to find empty columns in the alien matrix
@@ -1315,11 +1315,11 @@ static void init_player_state(void)
     {
         for (j = 0; j < 11; j++)
         {
-            Alien_unoccupied_rows_per_col[i][j] = 0; // when terminated bullet handler will add 1 to the occupied cols, when = 5, then col is empty
+            alien_unoccupied_rows_per_col[i][j] = 0; // when terminated bullet handler will add 1 to the occupied cols, when = 5, then col is empty
         }
         for (j = 0; j < 5; j++)
         {
-            Alien_unoccupied_cols_per_row[i][j] = 0;
+            alien_unoccupied_cols_per_row[i][j] = 0;
         }
     }
 
@@ -1332,7 +1332,7 @@ static void init_player_state(void)
         alien_anim = Player[0].alien_anim;
         for (i = 0; i < 2; i++)
             for (j = 0; j < 55; j++)
-                Alien_img_ptr[i][j] = invr_anim_img[i][(j < 22) ? 0 : (j < 44) ? 1 : 2];
+                alien_img_ptr[i][j] = invr_anim_img[i][(j < 22) ? 0 : (j < 44) ? 1 : 2];
     }
 }
 
@@ -1429,7 +1429,7 @@ static void init_sprites(void)
             ptr = SPR_CFG_BASE + (sprite_number++ * sizeof(vga_mode4_sprite_t));
             xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, DISAPPEAR_X);
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, alien_y);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, Alien_img_ptr[alien_anim][alien_num]);
+            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, alien_img_ptr[alien_anim][alien_num]);
             xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
             xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
             alien_num++;
@@ -1438,7 +1438,7 @@ static void init_sprites(void)
     }
     alien_num = 54;
     alien_x = alien_ref_x = INVADER_MTRX_START_X;
-    alien_y = alien_ref_y = Mtrx_Y_Start[Player[active_player].index_start_y_pos++];
+    alien_y = alien_ref_y = mtrx_y_start[Player[active_player].index_start_y_pos++];
     alien_row_num = 5;
     alien_col_num = 11;
 
@@ -1588,34 +1588,34 @@ static void game_init(void)
     {
         for (j = 0; j < 11; j++)
         {
-            Alien_rel_x[(i * 11) + j] = j * 16;
-            Alien_rel_y[(i * 11) + j] = i * -16;
+            alien_rel_x[(i * 11) + j] = j * 16;
+            alien_rel_y[(i * 11) + j] = i * -16;
         }
     }
 
     // CREATE ARRAY of CONSTANT Bounding Box (BBOX) VALUES and INITIALIZE "UPDATE" FLAG to TRUE
     for (i = 0; i < 55; i++)
     {
-        Alien_update[i] = true;
-        Alien_bbox_y0[i] = 4;
-        Alien_bbox_y1[i] = 12;
+        alien_update[i] = true;
+        alien_bbox_y0[i] = 4;
+        alien_bbox_y1[i] = 12;
         if (i < 22)
         {
-            Alien_bbox_x0[i] = INVADER_MAG_BBOX_X0; // for CD, remainder of (Bullet_x - Alien_ref_x)/16 s/b between x0 and x1, +/-2 based on update flag
-            Alien_bbox_x1[i] = INVADER_MAG_BBOX_X1;
-            Alien_width[i] = 12;
+            alien_bbox_x0[i] = INVADER_MAG_BBOX_X0; // for CD, remainder of (Bullet_x - Alien_ref_x)/16 s/b between x0 and x1, +/-2 based on update flag
+            alien_bbox_x1[i] = INVADER_MAG_BBOX_X1;
+            alien_width[i] = 12;
         }
         else if (i < 44)
         {
-            Alien_bbox_x0[i] = INVADER_BLU_BBOX_X0;
-            Alien_bbox_x1[i] = INVADER_BLU_BBOX_X1;
-            Alien_width[i] = 11;
+            alien_bbox_x0[i] = INVADER_BLU_BBOX_X0;
+            alien_bbox_x1[i] = INVADER_BLU_BBOX_X1;
+            alien_width[i] = 11;
         }
         else
         {
-            Alien_bbox_x0[i] = INVADER_GRN_BBOX_X0;
-            Alien_bbox_x1[i] = INVADER_GRN_BBOX_X1;
-            Alien_width[i] = 8;
+            alien_bbox_x0[i] = INVADER_GRN_BBOX_X0;
+            alien_bbox_x1[i] = INVADER_GRN_BBOX_X1;
+            alien_width[i] = 8;
         }
     }
 
@@ -1720,9 +1720,9 @@ static void game_init(void)
     bullet_boundary_hit = 0;
 
     // Bomb with Bullet and Bullet with Bomb Collisions
-    ShotOverlapTop = 0;
-    ShotOverlapBottom = 0, ShotColumn = 0;
-    BombTopRow = 0, BombRows = 0;
+    shot_overlap_top = 0;
+    shot_overlap_bottom = 0, shot_column = 0;
+    bomb_top_row = 0, bomb_rows = 0;
     bomb_image_mem = BOMB_IMG_BASE;
 
     // bomb with bunker collisions
@@ -1865,15 +1865,15 @@ static void control_loop(void)
                 Player[active_player].num_of_aliens = 55;
                 for (i = 0; i < 55; i++)
                 {
-                    Players_Alien_Exists[active_player][i] = 1;
+                    players_alien_exists[active_player][i] = 1;
                 }
                 alien_anim = 1;
                 // update key state save VARS and reinitialize to start the next level/wave
                 // increment index into 'starting y pos' table, roll-over after 8
                 if (Player[active_player].index_start_y_pos > 8)
                     Player[active_player].index_start_y_pos = 1;
-                Player[active_player].alien_ref_y = Mtrx_Y_Start[Player[active_player].index_start_y_pos];
-                alien_ref_y = Mtrx_Y_Start[Player[active_player].index_start_y_pos];
+                Player[active_player].alien_ref_y = mtrx_y_start[Player[active_player].index_start_y_pos];
+                alien_ref_y = mtrx_y_start[Player[active_player].index_start_y_pos];
                 Player[active_player].index_start_y_pos++;
                 Player[active_player].level++;
                 Player[active_player].alien_ref_x = INVADER_MTRX_START_X;
@@ -1887,9 +1887,9 @@ static void control_loop(void)
                 // Reset count of unoccupied alien columns and rows to zero
                 // When an alien is terminated the bullet handler will add 1 to the # of unoccupied cols, when = 5, then col is empty
                 for (j = 0; j < 11; j++)
-                    Alien_unoccupied_rows_per_col[active_player][j] = 0;
+                    alien_unoccupied_rows_per_col[active_player][j] = 0;
                 for (j = 0; j < 5; j++)
-                    Alien_unoccupied_cols_per_row[active_player][j] = 0;
+                    alien_unoccupied_cols_per_row[active_player][j] = 0;
                 alien_num = 54;
                 alien_x = alien_ref_x;
                 alien_y = alien_ref_y;
@@ -1923,7 +1923,7 @@ static void control_loop(void)
                 print_string(6, 9, "                          ", !slow);
 
                 // change BUNKER SPRITE IMAGE pointers to OTHER PLAYER'S bunker images
-                bunker_img_ptr = (1 - active_player) * Bunker_plyr1_img[0] + active_player * Bunker_plyr2_img[0];
+                bunker_img_ptr = (1 - active_player) * bunker_plyr1_img[0] + active_player * bunker_plyr2_img[0];
                 for (i = 0; i < 4; i++)
                 { // switch to the other bank of 4 bunker images
                     ptr = SPR_CFG_BASE + ((BUNKER_FIRST_SPR_NUM + i) * sizeof(vga_mode4_sprite_t));
@@ -1999,7 +1999,7 @@ static void control_loop(void)
         bullet_loops = 0;
         ramp_up = true;
         alien_march_sfx_enable = true;
-        alien_march_sfx_timer = Alien_March_SFX_Rate[Player[active_player].alien_march_index];
+        alien_march_sfx_timer = alien_march_sfx_rate[Player[active_player].alien_march_index];
         alien_march_sfx_timer = 100;
         alien_march_sfx_start = 0;
 
@@ -2035,7 +2035,7 @@ static void update_sprites(void)
         if (alien_explosion_done)
         {                                                                                                            // indicates termination process has been completed/is done
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);                                        // disappear dead alien
-            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, Alien_img_ptr[alien_anim][hit_alien_idx]); // restore alien image for next round
+            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, alien_img_ptr[alien_anim][hit_alien_idx]); // restore alien image for next round
             alien_explosion_done = false;                                                                            // reset flag for next time
         }
         // if hit, do explosion image
@@ -2049,7 +2049,7 @@ static void update_sprites(void)
             ptr = SPR_CFG_BASE + ((alien_num + ALIEN_FIRST_SPR_NUM) * sizeof(vga_mode4_sprite_t));
             xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, alien_x);
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, alien_y);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, Alien_img_ptr[alien_anim][alien_num]);
+            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, alien_img_ptr[alien_anim][alien_num]);
         } // END ALIEN SPRITE UPDATE
     }
     skip_alien_sprite_update = false;
@@ -2153,7 +2153,7 @@ static void alien_march_sfx(void)
             toggle_tones = 1 - toggle_tones;
             alien_march_note_sequ = 0;
             // reload timer using current index, same value if # of aliens hasn't crossed the next threshold
-            alien_march_sfx_timer = Alien_March_SFX_Rate[Player[active_player].alien_march_index];
+            alien_march_sfx_timer = alien_march_sfx_rate[Player[active_player].alien_march_index];
         }
         else
         {
@@ -2313,29 +2313,29 @@ static void bullet_collision_detect(void)
                 {
                     // This bbox for y1 is used for BULLET/BOMB COLLISION DETECTION and BOMB/BULLET CD ONLY
                     bullet_y1 = bullet_y + 4;
-                    ShotOverlapTop = bullet_y1 - Bomb[i].y;
-                    ShotOverlapBottom = Bomb[i].y1 - bullet_y0;
-                    ShotColumn = 2 + bullet_x0 - Bomb[i].x0;
-                    if (ShotOverlapBottom > 0 && ShotOverlapTop > 0)
+                    shot_overlap_top = bullet_y1 - Bomb[i].y;
+                    shot_overlap_bottom = Bomb[i].y1 - bullet_y0;
+                    shot_column = 2 + bullet_x0 - Bomb[i].x0;
+                    if (shot_overlap_bottom > 0 && shot_overlap_top > 0)
                     { // then bullet overlaps bomb in y axis
-                        if (ShotOverlapTop < 4)
+                        if (shot_overlap_top < 4)
                         {
-                            BombTopRow = 0;
-                            BombRows = ShotOverlapTop;
+                            bomb_top_row = 0;
+                            bomb_rows = shot_overlap_top;
                         }
-                        else if (ShotOverlapBottom < 4)
+                        else if (shot_overlap_bottom < 4)
                         {
-                            BombTopRow = 8 - ShotOverlapBottom;
-                            BombRows = ShotOverlapBottom;
+                            bomb_top_row = 8 - shot_overlap_bottom;
+                            bomb_rows = shot_overlap_bottom;
                         }
                         else
                         {
-                            BombTopRow = bullet_y0 - Bomb[i].y;
-                            BombRows = 4;
+                            bomb_top_row = bullet_y0 - Bomb[i].y;
+                            bomb_rows = 4;
                         }
 
                         bomb_image_mem = BOMB_IMG_BASE + (((i * 4) + Bomb[i].anim_frame) * SPR_8X8_SIZE);
-                        bullet_bomb_hit = bullet_bomb_micro_collision(bomb_image_mem, BombTopRow, ShotColumn, BombRows);
+                        bullet_bomb_hit = bullet_bomb_micro_collision(bomb_image_mem, bomb_top_row, shot_column, bomb_rows);
                     }
                     if (bullet_bomb_hit == 1)
                     {
@@ -2361,7 +2361,7 @@ static void bullet_collision_detect(void)
             // Macro test x-axis where do we have overlap, if any?
             delta_x = bullet_x0 - BUNKER_ZERO_X0;
             // Macro CD x-axis -- at least partially inside left edge of 1st bunker and right edge of last bunker
-            // Last Bunker x1 + alien width, 3*45 + 22 + Alien_width[alien_num] (45 = width bunker+gap)
+            // Last Bunker x1 + alien width, 3*45 + 22 + alien_width[alien_num] (45 = width bunker+gap)
             if ((delta_x >= 0) && (delta_x < 45 + 45 + 45 + 22))
             {
                 bunker_num = find_bunker_for_x(22);
@@ -2398,27 +2398,27 @@ static void bullet_collision_detect(void)
             delta_rel_x = (uint8_t)delta_x & 0x0F; // get the bullet position relative to alien x (which is the remainder after divide by 16)
             alien_col_num = (uint8_t)delta_x >> 4; // divide by 16 to get column number
             hit_alien_idx = (alien_row_num * 11) + alien_col_num;
-            if (Players_Alien_Exists[active_player][hit_alien_idx] == 1)
+            if (players_alien_exists[active_player][hit_alien_idx] == 1)
             {
-                if (delta_rel_y < Alien_bbox_y1[hit_alien_idx] && (delta_rel_y >= Alien_bbox_y0[hit_alien_idx]))
+                if (delta_rel_y < alien_bbox_y1[hit_alien_idx] && (delta_rel_y >= alien_bbox_y0[hit_alien_idx]))
                     alien_y_hit = 1;
-                if (Alien_update[hit_alien_idx] != alien_ref_update)
+                if (alien_update[hit_alien_idx] != alien_ref_update)
                 {
                     // hit alien hasn't been updated, if moving right subtract 2, left add 2 to bbox
                     if (Player[active_player].alien_x_incr == +2)
                     { // moving aliens to the right, offset bbox to the left by 2
-                        if ((delta_rel_x >= Alien_bbox_x0[hit_alien_idx] - 2) && (delta_rel_x < Alien_bbox_x1[hit_alien_idx] - 2))
+                        if ((delta_rel_x >= alien_bbox_x0[hit_alien_idx] - 2) && (delta_rel_x < alien_bbox_x1[hit_alien_idx] - 2))
                             alien_x_hit = 1;
                     }
                     else
                     {
-                        if ((delta_rel_x >= Alien_bbox_x0[hit_alien_idx] + 2) && (delta_rel_x < Alien_bbox_x1[hit_alien_idx] + 2))
+                        if ((delta_rel_x >= alien_bbox_x0[hit_alien_idx] + 2) && (delta_rel_x < alien_bbox_x1[hit_alien_idx] + 2))
                             alien_x_hit = 1;
                     }
                 }
                 else
                 { // hit alien has already been updated to match reference pos
-                    if ((delta_rel_x >= Alien_bbox_x0[hit_alien_idx]) && (delta_rel_x < Alien_bbox_x1[hit_alien_idx]))
+                    if ((delta_rel_x >= alien_bbox_x0[hit_alien_idx]) && (delta_rel_x < alien_bbox_x1[hit_alien_idx]))
                     {
                         alien_x_hit = 1;
                     }
@@ -2428,8 +2428,8 @@ static void bullet_collision_detect(void)
                 alien_y_hit = 0;
                 if (alien_hit == 1)
                 {
-                    Alien_unoccupied_cols_per_row[active_player][alien_row_num]++; // count number of terminated aliens in each row & column
-                    Alien_unoccupied_rows_per_col[active_player][alien_col_num]++;
+                    alien_unoccupied_cols_per_row[active_player][alien_row_num]++; // count number of terminated aliens in each row & column
+                    alien_unoccupied_rows_per_col[active_player][alien_col_num]++;
                     bullet_y = DISAPPEAR_Y; // disapper bullet
                     // use explosion done time to delay spawning next bullet until alien explos is over
                     Bullet.explosion_ticks = ALIEN_EXPL_TICKS;
@@ -2466,7 +2466,7 @@ static void bullet_collision_detect(void)
         Saucer.score_start_time--;
     if (Saucer.score_start_time == 1)
     { // since it's a one time event, need to use value = 1 (not 0)
-        saucer_expl_score_image_ptr = Saucer_Score.image_ptr;
+        saucer_expl_score_image_ptr = saucer_score.image_ptr;
     }
     if (bullet_hit == 0 && Saucer.exists)
     {
@@ -2484,20 +2484,20 @@ static void bullet_collision_detect(void)
             bullet_y = DISAPPEAR_Y;
             Saucer.next_spawn_time = 0;
             Saucer.spawn_enable = false;
-            Player[active_player].score += Saucer_Score_Table[Player[active_player].bullets_fired];
-            switch (Saucer_Score_Table[Player[active_player].bullets_fired])
+            Player[active_player].score += saucer_score_table[Player[active_player].bullets_fired];
+            switch (saucer_score_table[Player[active_player].bullets_fired])
             {
             case 5:
-                Saucer_Score.image_ptr = SAUCER_SCORE50_IMG_BASE;
+                saucer_score.image_ptr = SAUCER_SCORE50_IMG_BASE;
                 break;
             case 10:
-                Saucer_Score.image_ptr = SAUCER_SCORE100_IMG_BASE;
+                saucer_score.image_ptr = SAUCER_SCORE100_IMG_BASE;
                 break;
             case 15:
-                Saucer_Score.image_ptr = SAUCER_SCORE150_IMG_BASE;
+                saucer_score.image_ptr = SAUCER_SCORE150_IMG_BASE;
                 break;
             case 30:
-                Saucer_Score.image_ptr = SAUCER_SCORE300_IMG_BASE;
+                saucer_score.image_ptr = SAUCER_SCORE300_IMG_BASE;
                 break;
             }
         }
@@ -2563,7 +2563,7 @@ static void bomb_move_spawn_all(void)
                         }
                         if (alien_col_num < 11)
                         {
-                            if (Alien_unoccupied_rows_per_col[active_player][alien_col_num] < 5)
+                            if (alien_unoccupied_rows_per_col[active_player][alien_col_num] < 5)
                             { // valid col # (>0n & <11) and col is occupied
                                 // if column isn't empty, find the row # of the first alien from the bottom and it's relative y position
                                 alien_num_to_drop_bomb_from = alien_col_num;
@@ -2571,7 +2571,7 @@ static void bomb_move_spawn_all(void)
                                 // find first alien from the bottom or skip if column is empty
                                 for (i = 0; i < 5; i++)
                                 {
-                                    if ((Players_Alien_Exists[active_player][alien_num_to_drop_bomb_from] == 0) ||
+                                    if ((players_alien_exists[active_player][alien_num_to_drop_bomb_from] == 0) ||
                                         ((alien_hit > 0) && (hit_alien_idx == alien_num_to_drop_bomb_from)))
                                     {
                                         alien_num_to_drop_bomb_from += 11;
@@ -2636,7 +2636,7 @@ static void bomb_move_spawn_all(void)
                 // bomb 1 drops are disabled when one alien remains
                 if (Game.bomb_spawn_enable && (Player[active_player].num_of_aliens > 1) && Gunner.state <= GUNNER_EXPLODING)
                 {
-                    alien_col_num = Bomb_Column_Sequ[Player[active_player].col_index_spike++];
+                    alien_col_num = bomb_column_sequ[Player[active_player].col_index_spike++];
                     if (Player[active_player].col_index_spike > 14)
                         Player[active_player].col_index_spike = 0;
                     Bomb[1].drop_rel_y = alien_ref_y + 20; // +16 to start drop 4 px below bottom edge of lowest alien
@@ -2663,7 +2663,7 @@ static void bomb_move_spawn_all(void)
             {
                 if (Game.bomb_spawn_enable && Gunner.state <= GUNNER_EXPLODING)
                 {
-                    alien_col_num = Bomb_Column_Sequ[Player[active_player].col_index_sawtooth];
+                    alien_col_num = bomb_column_sequ[Player[active_player].col_index_sawtooth];
                     if (++Player[active_player].col_index_sawtooth > 15)
                         Player[active_player].col_index_sawtooth = 0;
                     Bomb[2].drop_rel_y = alien_ref_y + 21; // +17 to start drop 5 px below bottom edge of lowest alien
@@ -2693,28 +2693,28 @@ static void bomb_collision_detect(void)
     if (bullet_x0 >= Bomb[active_bomb_idx].x0 && bullet_x0 < Bomb[active_bomb_idx].x1)
     {
         bullet_y1 = bullet_y + 4;
-        ShotOverlapTop = bullet_y1 - Bomb[active_bomb_idx].y;
-        ShotOverlapBottom = Bomb[active_bomb_idx].y1 - bullet_y0;
-        ShotColumn = 2 + bullet_x0 - Bomb[active_bomb_idx].x0;
-        if (ShotOverlapBottom > 0 && ShotOverlapBottom < 13 && ShotOverlapTop > 0 && ShotOverlapTop < 13)
+        shot_overlap_top = bullet_y1 - Bomb[active_bomb_idx].y;
+        shot_overlap_bottom = Bomb[active_bomb_idx].y1 - bullet_y0;
+        shot_column = 2 + bullet_x0 - Bomb[active_bomb_idx].x0;
+        if (shot_overlap_bottom > 0 && shot_overlap_bottom < 13 && shot_overlap_top > 0 && shot_overlap_top < 13)
         {
-            if (ShotOverlapTop < 4)
+            if (shot_overlap_top < 4)
             {
-                BombTopRow = 0;
-                BombRows = ShotOverlapTop;
+                bomb_top_row = 0;
+                bomb_rows = shot_overlap_top;
             }
-            else if (ShotOverlapBottom < 4)
+            else if (shot_overlap_bottom < 4)
             {
-                BombTopRow = 8 - ShotOverlapBottom;
-                BombRows = ShotOverlapBottom;
+                bomb_top_row = 8 - shot_overlap_bottom;
+                bomb_rows = shot_overlap_bottom;
             }
             else
             {
-                BombTopRow = bullet_y0 - Bomb[active_bomb_idx].y;
-                BombRows = 4;
+                bomb_top_row = bullet_y0 - Bomb[active_bomb_idx].y;
+                bomb_rows = 4;
             }
             bomb_image_mem = BOMB_IMG_BASE + (((active_bomb_idx * 4) + Bomb[active_bomb_idx].anim_frame) * SPR_8X8_SIZE);
-            Bomb[active_bomb_idx].hit = 2 * bullet_bomb_micro_collision(bomb_image_mem, BombTopRow, ShotColumn, BombRows);
+            Bomb[active_bomb_idx].hit = 2 * bullet_bomb_micro_collision(bomb_image_mem, bomb_top_row, shot_column, bomb_rows);
         }
         if (Bomb[active_bomb_idx].hit == 2)
         {
@@ -2934,7 +2934,7 @@ static void terminate_alien(void)
         {
             alien_explosion_done = true;                               // flag transition to completion
             alien_hit = 0;                                             // clear collision flag to terminate explosion cycle
-            Players_Alien_Exists[active_player][hit_alien_idx] = 0; // terminate alien
+            players_alien_exists[active_player][hit_alien_idx] = 0; // terminate alien
             Player[active_player].num_of_aliens--;
             // turn off SFX
             alien_explosion_sfx_enable = false;
@@ -2952,7 +2952,7 @@ static void terminate_alien(void)
                 silence_all_sfx();
             }
             // update ALIEN MARCH SFX rate based on # aliens remaining
-            else if (Alien_March_SFX_Threshold[Player[active_player].alien_march_index] > Player[active_player].num_of_aliens)
+            else if (alien_march_sfx_threshold[Player[active_player].alien_march_index] > Player[active_player].num_of_aliens)
             {
                 // move index to next faster pulse rate, note... actual rate is not updated until current cycle is over
                 Player[active_player].alien_march_index++;
@@ -3194,7 +3194,7 @@ static void alien_move_animate(void)
             alien_index_wrapped = 1;
         }
         // loop while alien does NOT exist, exit loop with alien_num = # of next existing alien and handle roll-over
-        while (Players_Alien_Exists[active_player][alien_num] == 0)
+        while (players_alien_exists[active_player][alien_num] == 0)
         {
             alien_num++;
             // roll-over alien num, find unoccupied 1st/last row/col, check x boundary collision and set drop flag,
@@ -3219,12 +3219,12 @@ static void alien_move_animate(void)
             alien_drop = 0;
             // find left and right edge (x) of matrix
             // check to see if 1st column is empty, i.e. 5 terminated aliens in the column
-            while (Alien_unoccupied_rows_per_col[active_player][Player[active_player].alien_1st_col] == 5)
+            while (alien_unoccupied_rows_per_col[active_player][Player[active_player].alien_1st_col] == 5)
             {
                 Player[active_player].alien_1st_col++; // if so, update 1st column #
                 Player[active_player].alien_1st_col_rel_x += 16;
             } // ditto for last col
-            while (Alien_unoccupied_rows_per_col[active_player][Player[active_player].alien_last_col] == 5)
+            while (alien_unoccupied_rows_per_col[active_player][Player[active_player].alien_last_col] == 5)
             {
                 Player[active_player].alien_last_col--;
                 Player[active_player].alien_last_col_rel_x -= 16;
@@ -3255,9 +3255,9 @@ static void alien_move_animate(void)
             alien_ref_update = !alien_ref_update; // toggle flag to track which aliens are up to date compared to the reference x/y
         }
         // Now that we have the next (existing) alien #, calc its position and image
-        alien_x = alien_ref_x + (int16_t)Alien_rel_x[alien_num];
-        alien_y = alien_ref_y + Alien_rel_y[alien_num];
-        Alien_update[alien_num] = alien_ref_update;
+        alien_x = alien_ref_x + (int16_t)alien_rel_x[alien_num];
+        alien_y = alien_ref_y + alien_rel_y[alien_num];
+        alien_update[alien_num] = alien_ref_update;
 
         // ALIEN COLLSION WITH GROUND -- "ALIEN HAS LANDED - GAME OVER"
         // ##########################################
@@ -3283,35 +3283,35 @@ static void alien_bunker_collision(void)
     // ... overlap between alien and bunker top
 
     // Macro CD y-axis
-    if ((Alien_rel_y[alien_num] + alien_ref_y + 4) >= (BUNKER_Y + 8) &&
-        (Alien_rel_y[alien_num] + alien_ref_y + 4) <= (BUNKER_Y + 16))
+    if ((alien_rel_y[alien_num] + alien_ref_y + 4) >= (BUNKER_Y + 8) &&
+        (alien_rel_y[alien_num] + alien_ref_y + 4) <= (BUNKER_Y + 16))
     {
         // Macro test x-axis where do we have overlap, if any?
-        delta_x = (Alien_rel_x[alien_num] + alien_ref_x + Alien_bbox_x1[alien_num]) - BUNKER_ZERO_X0;
+        delta_x = (alien_rel_x[alien_num] + alien_ref_x + alien_bbox_x1[alien_num]) - BUNKER_ZERO_X0;
         // Macro CD x-axis -- at least partially inside left edge of 1st bunker and right edge of last bunker
-        // Last Bunker x1 + alien width, 3*45 + 22 + Alien_width[alien_num] (45 = width bunker+gap)
-        if ((delta_x > 0) && (delta_x < 45 + 45 + 45 + 22 + Alien_width[alien_num]))
+        // Last Bunker x1 + alien width, 3*45 + 22 + alien_width[alien_num] (45 = width bunker+gap)
+        if ((delta_x > 0) && (delta_x < 45 + 45 + 45 + 22 + alien_width[alien_num]))
         {
-            bunker_num = find_bunker_for_x(22 + Alien_width[alien_num]);
+            bunker_num = find_bunker_for_x(22 + alien_width[alien_num]);
             if (bunker_num < 4)
             {
-                if (delta_x <= Alien_width[alien_num])
+                if (delta_x <= alien_width[alien_num])
                 {
                     bunker_start_addr = bunker_img_base_addr + (8 * 64) + 10; // image offset is 5 px, 2 bytes/px, clear 2nd byte of 2 bytes/px
                     bunker_num_col = delta_x;                                // # col = overlap
                 }
                 else if (delta_x > 22)
                 {
-                    bunker_start_addr = bunker_img_base_addr + (8 * 64) + (2 * (delta_x - Alien_width[alien_num] + 5)); // -Alien_width[alien_num] to get left edge of alien, +5 for memory offset
-                    bunker_num_col = Alien_width[alien_num] - (delta_x - 22);
+                    bunker_start_addr = bunker_img_base_addr + (8 * 64) + (2 * (delta_x - alien_width[alien_num] + 5)); // -alien_width[alien_num] to get left edge of alien, +5 for memory offset
+                    bunker_num_col = alien_width[alien_num] - (delta_x - 22);
                 }
                 else
                 {
-                    bunker_start_addr = bunker_img_base_addr + (8 * 64) + (2 * (delta_x - Alien_width[alien_num] + 5)); // -Alien_width[alien_num] to get left edge of alien, +5 for memory offset
-                    bunker_num_col = Alien_width[alien_num];
+                    bunker_start_addr = bunker_img_base_addr + (8 * 64) + (2 * (delta_x - alien_width[alien_num] + 5)); // -alien_width[alien_num] to get left edge of alien, +5 for memory offset
+                    bunker_num_col = alien_width[alien_num];
                 }
                 lower_half_bunker = 0;
-                if ((Alien_rel_y[alien_num] + alien_ref_y + 4) >= BUNKER_Y + 16)
+                if ((alien_rel_y[alien_num] + alien_ref_y + 4) >= BUNKER_Y + 16)
                     lower_half_bunker = 1;
                 erase_top_of_bunker(bunker_start_addr, bunker_num_col, lower_half_bunker);
             }
