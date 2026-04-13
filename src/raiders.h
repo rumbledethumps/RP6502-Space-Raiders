@@ -3,17 +3,6 @@
 //################################ -= COMPILER DIRECTIVES =- #########################################
 //####################################################################################################
 
-//#define OLD_CODE
-//#define NEW_CODE
-
-// 6522 VIA REGISTERS
-#define VIA_BASE 0xFF00U
-#define VIA_CNTR_1_LSB 0xFF04U       // TIMER 1, COUNTER LS BYTE
-#define VIA_CNTR_1_MSB 0xFF05U       // MS BYTE
-#define VIA_ACR 0xFF0BU              // AUX CONTROL REGISTER
-#define VIA_IFR 0xFF0DU              // INTERRUPT FLAG REG
-#define VIA_IER 0xFF0EU              // INTERRUPT ENABLE REG
-
 // XREG DATA/CONFIG ARRAY ADDRESSES
 
 // CHARACTER MODE
@@ -66,6 +55,57 @@ uint8_t keystates[KEYBOARD_BYTES] = {0};
 
 #define TOP_BOUNDARY 32
 #define BOTTOM_BOUNDARY 224
+
+// CHARACTER SCREEN
+#define CHAR_SCREEN_BASE 0xB000U
+#define CHARS_PER_ROW 40
+#define CHAR_ROWS 30
+#define BYTES_PER_CHAR 3
+
+// GAMEPLAY TIMING
+#define GUNNER_SPAWN_TICKS      64
+#define BOMB_INITIAL_SPAWN_TICKS 120
+#define BONUS_SCORE_THRESHOLD   150  // score is stored / 10, so this = 1500 points
+
+// BOMB RELOAD RATE (higher = slower spawning)
+#define BOMB_RELOAD_FASTEST      7
+#define BOMB_RELOAD_FAST         8
+#define BOMB_RELOAD_MEDIUM      11
+#define BOMB_RELOAD_SLOW        16
+#define BOMB_RELOAD_INITIAL     48
+
+// BOMB RELOAD SCORE THRESHOLDS (score / 10)
+#define BOMB_RATE_SCORE_4     1229   // fastest
+#define BOMB_RATE_SCORE_3      819
+#define BOMB_RATE_SCORE_2      409
+#define BOMB_RATE_SCORE_1       51   // slowest non-initial
+
+// GUNNER MOVEMENT BOUNDS
+#define GUNNER_MIN_X  55
+#define GUNNER_MAX_X 249
+#define GUNNER_DEMO_MAX_X (320 - 96)
+
+// ALIEN LANDING THRESHOLD
+#define ALIEN_LANDING_Y 200
+
+// OBJECT STATE ENUMS
+typedef enum {
+    GUNNER_SPAWNING,    // spawn timer counting down, not visible
+    GUNNER_ALIVE,       // on screen, player-controllable
+    GUNNER_EXPLODING,   // hit by bomb, explosion animation playing
+    GUNNER_BLOWN_UP     // explosion complete, waiting for round to end
+} GunnerState;
+
+typedef enum {
+    SAUCER_INACTIVE,    // not spawned, timer may be running
+    SAUCER_FLYING,      // on screen, moving
+    SAUCER_EXPLODING,   // hit by bullet, showing explosion
+    SAUCER_SCORING      // showing score value
+} SaucerState;
+
+// COLLISION HELPERS
+#define AABB_OVERLAP(a_x0, a_y0, a_x1, a_y1, b_x0, b_y0, b_x1, b_y1) \
+    ((a_x0) < (b_x1) && (a_x1) > (b_x0) && (a_y0) < (b_y1) && (a_y1) > (b_y0))
 
 // SPRITE CONFIG BASE ADDR AND IMAGE BASE ADDR... and SPRITE IMAGE BUFFER SIZES
 #define SPR_CFG_BASE 0xC000U     // Base address of sprite config array
@@ -131,8 +171,8 @@ uint8_t keystates[KEYBOARD_BYTES] = {0};
 
 // ####  ALIENS  ####
 // INVR SPRITES
-#define NUM_INVR_SPR 55                  // ID is 1 through 55
-#define INVR_FIRST_SPR_NUM   (SAUCER_EXPLOS_FIRST_SPR_NUM + NUM_OF_SAUCER_EXPLOS_SPR)      // SPRITE # for 1st alien sprite, s/b 5
+#define NUM_ALIEN_SPR 55                  // ID is 1 through 55
+#define ALIEN_FIRST_SPR_NUM   (SAUCER_EXPLOS_FIRST_SPR_NUM + NUM_OF_SAUCER_EXPLOS_SPR)      // SPRITE # for 1st alien sprite, s/b 5
 // INVR ANIMATION
 #define NUM_INVR_ANIM_SPR 3          // 3 types
 #define NUM_INVR_IMGS_PER 2          // each with 2 animation images
@@ -180,14 +220,14 @@ uint8_t keystates[KEYBOARD_BYTES] = {0};
 // x = 2 pixels/tick, y = 8 pixels per drop, explosion lasts 20 ticks
 #define INVR_X_INCR 2           // effectively speed 2px/tick
 #define INVR_DROP_RATE 8
-// timed this on original, explos lasted 16 ticks, same as bullet/player short... #define INVR_EXPL_TICKS 20
+// timed this on original, explos lasted 16 ticks, same as bullet/player short... #define ALIEN_EXPL_TICKS 20
 // counted ticks on original, it's 17
-#define INVR_EXPL_TICKS 17
+#define ALIEN_EXPL_TICKS 17
 
 // ####  SAUCERS  ####
 // SPRITES
 #define NUM_SAUCER_SPR 1    // One SAUCER SPRITE, but is used for multiple types/images/bounding box
-#define SAUCER_FIRST_SPR_NUM    (INVR_FIRST_SPR_NUM + NUM_INVR_SPR)  // s/b 60
+#define SAUCER_FIRST_SPR_NUM    (ALIEN_FIRST_SPR_NUM + NUM_ALIEN_SPR)  // s/b 60
 // Need to add SAUCER SCORE Text to sprite images
 // Note: 2nd saucer is in a holding pattern
 //      print score # for a period of time  before terminating saucer
@@ -268,12 +308,12 @@ uint8_t keystates[KEYBOARD_BYTES] = {0};
 // One 16X16 for ALIEN, Two 8X8 for BULLETS and BOMBS
 #define NUM_EXPLOS_SPR  0       // these are explosion images for existing sprites (alien, bullet, bomb)
 #define NUM_BIG_EXPL_IMG   1
-#define INVR_EXPL_IMG_BASE     (LIVES_BONUS_IMG_BASE + LIVES_BONUS_IMG_BUF)
+#define ALIEN_EXPL_IMG_BASE     (LIVES_BONUS_IMG_BASE + LIVES_BONUS_IMG_BUF)
 #define INVR_EXPL_IMG_BUF   SPR_16X16_SIZE
 #define NUM_SMALL_EXPL_IMG 2
-#define SMALL_EXPL_IMG_BASE    (INVR_EXPL_IMG_BASE + INVR_EXPL_IMG_BUF)
+#define SMALL_EXPL_IMG_BASE    (ALIEN_EXPL_IMG_BASE + INVR_EXPL_IMG_BUF)
 #define SMALL_EXPL_IMG_BUF     (NUM_SMALL_EXPL_IMG * SPR_8X8_SIZE)
-#define BULLET_EXPL_IMG_BASE   (INVR_EXPL_IMG_BASE + INVR_EXPL_IMG_BUF)
+#define BULLET_EXPL_IMG_BASE   (ALIEN_EXPL_IMG_BASE + INVR_EXPL_IMG_BUF)
 #define BOMB_EXPL_IMG_BASE   (BULLET_EXPL_IMG_BASE + SPR_8X8_SIZE)
 
 // ####  BULLET  ####
@@ -336,7 +376,7 @@ uint8_t keystates[KEYBOARD_BYTES] = {0};
 // Note: BOMB SPEED is variable between 4 and 5 px per step
 // BASED ON???? see original behavior, I think speeds up when fewer than TBD aliens remain
 
-#define TOTAL_NUM_SPR (NUM_OF_BUNKR_SPR + NUM_OF_SAUCER_EXPLOS_SPR + NUM_INVR_SPR + NUM_SAUCER_SPR + NUM_GUNNER_SPR + NUM_LIVES_SPR + NUM_BULLET_SPR + NUM_BOMB_SPR)
+#define TOTAL_NUM_SPR (NUM_OF_BUNKR_SPR + NUM_OF_SAUCER_EXPLOS_SPR + NUM_ALIEN_SPR + NUM_SAUCER_SPR + NUM_GUNNER_SPR + NUM_LIVES_SPR + NUM_BULLET_SPR + NUM_BOMB_SPR)
 //#define TOTAL_NUM_SPR 72
 
 // For accessing the font library
