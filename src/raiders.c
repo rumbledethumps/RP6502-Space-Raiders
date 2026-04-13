@@ -1123,6 +1123,11 @@ static void init_display(void)
     initialize_char_screen();
     erase_xram_sprite_config();
 
+    // Clear stale pixel data at 0x0000 where phantom (zeroed) sprites point
+    RIA.addr0 = 0x0000;
+    RIA.step0 = 0;
+    RIA.rw0 = 0;
+
     // Character mode config
     xram0_struct_set(0xFF00, vga_mode1_config_t, x_wrap, false);
     xram0_struct_set(0xFF00, vga_mode1_config_t, y_wrap, false);
