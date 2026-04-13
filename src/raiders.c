@@ -1092,6 +1092,8 @@ void main()
 // One-time initialization: load hiscore from USB drive
 static void boot_once(void)
 {
+    xreg_vga_canvas(1); // blank screen immediately, before slow file I/O
+
     Game.hi_score = 0;
     demo_terminated = false;
 
@@ -1138,7 +1140,12 @@ static void splash_and_input(void)
     // ##############    INITIALIZE GRAPHICS    ##############
     // #######################################################
     // screen is 320 x 240 pixels screen OR 40 cols by 30 rows characters
-    xreg_vga_canvas(1);
+    xreg_vga_canvas(1); // resets all mode config — screen is blank
+
+    // Clear screen memory and sprite config BEFORE enabling display modes
+    // so no garbage is ever visible
+    initialize_char_screen();
+    erase_xram_sprite_config();
 
     // Config character mode
     xram0_struct_set(0xFF00, vga_mode1_config_t, x_wrap, false);
@@ -1152,10 +1159,8 @@ static void splash_and_input(void)
     xram0_struct_set(0xFF00, vga_mode1_config_t, xram_font_ptr, 0x9980);    // address of old school 5x7 font array
     // Turn on CHARACTER graphics mode
     xreg_vga_mode(1, 3, CHAR_MODE_CFG, 1); // setup char mode in plane 1
-    // Turn on SPRITE graphics mode
-    erase_xram_sprite_config(); // but first... clear all XRAM SPACE used for sprite config arrays and screen char 40x30 array
-    // config sprites necessary for splash screens
-    // setup just one each of the alien and saucer sprites for the "SCORING TABLE", later will totally reconfig all sprites
+
+    // Config sprites for splash screens (scoring table)
     ptr = SPR_CFG_BASE + (5 * sizeof(vga_mode4_sprite_t)); // SAUCER FIRST
     xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, 96);
     xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
@@ -1171,16 +1176,11 @@ static void splash_and_input(void)
         xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
         xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
     }
-    // Define SPRITE config structure base address and total # of sprites (length of config structure)
+    // Turn on SPRITE graphics mode
     xreg_vga_mode(4, 0, SPR_CFG_BASE, TOTAL_NUM_SPR); // setup sprite mode in plane 0
-    // first clear screen
-    initialize_char_screen();
     // Turn on USB keyboard and gamepad I/O (must be before any delay_with_input calls)
     xreg_ria_keyboard(KEYBOARD_INPUT);
     xreg(0, 0, 2, 0xFF80U);
-    if (coin_delay(90)) // give the OS a chance to finish before displaying
-        return;
-
     paused = false;
 
     // ######################################
@@ -1342,8 +1342,7 @@ static void init_player_state(void)
 // Initialize SFX channels and load base parameters
 static void init_sfx(void)
 {
-    xreg(0, 1, 0x00, 0xFFFF); // turn off PSG
-    coin_delay(30);
+    silence_all_sfx();
     xreg(0, 1, 0x00, SFX_BASE_ADDR); // initialize PSG... set base address of xregs
 
     dummy_read = 0;
@@ -1758,8 +1757,6 @@ static void control_loop(void)
             // turn off all 8 SFX channels
             silence_all_sfx();
             // reset PSG
-            xreg(0, 1, 0x00, 0xFFFF); // turn off PSG
-            coin_delay(30);
             xreg(0, 1, 0x00, SFX_BASE_ADDR); // initialize PSG... set base address of xregs
 
             // check for another player
@@ -3304,7 +3301,7 @@ static void play_loop(void)
         handle_keyboard();
         if (Game.restart)
         {
-            xreg(0, 1, 0x00, 0xFFFF);
+            silence_all_sfx();
             fptr = fopen("raiders.hiscore", "wb+");
             fwrite(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
             fclose(fptr);
