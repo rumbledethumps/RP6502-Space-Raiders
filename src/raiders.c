@@ -254,29 +254,17 @@ unsigned char bullet_micro_bunker_hit;
 unsigned char bullet_saucer_hit;
 unsigned char bullet_boundary_hit;
 
-// Bullet/Bomb overlap (shared by bullet_collision_detect + bomb_collision_detect)
-int shot_overlap_top, shot_overlap_bottom, shot_column;
-int bomb_top_row, bomb_rows;
-unsigned bomb_image_mem;
-
 // Bomb state (shared by bomb_move, bomb_move_spawn_all, bomb_collision_detect, etc.)
-unsigned bomb_image_ptr;
 unsigned char bomb_type_counter, bomb_type_selector;
 unsigned char screw_bomb_cooldown;
 unsigned char bomb_speed;
 unsigned char bomb_reload_rate;
 unsigned char active_bomb_idx;
-bool bomb_micro_bunker_hit;
-unsigned int bomb_img_start_addr;
 
-// Bunker collision (shared by find_bunker_for_x, bullet/bomb/alien collision)
+// Bunker collision (shared by find_bunker_for_x and callers)
 unsigned bunker_img_base_addr;
-unsigned bunker_start_addr;
 unsigned char bunker_num;
 
-// Common collision vars (shared by multiple collision functions)
-int delta_x, delta_y;
-unsigned char delta_rel_x;
 
 // Timing (shared by play_loop, handle_keyboard, object_termination)
 unsigned char current_time;
@@ -292,12 +280,7 @@ struct
     unsigned char coin; // 0=none, 1=1P, 2=2P
 } Input;
 
-bool skip;
 bool paused;
-
-// Misc shared
-unsigned char dummy_read;
-unsigned temp1, temp2;
 
 // Print speed constants
 static const bool slow = true;
@@ -876,34 +859,34 @@ static const unsigned bunker_plyr2_img[4] = {
     BUNKER_0_PLYR2_IMG_BUF, BUNKER_1_PLYR2_IMG_BUF,
     BUNKER_2_PLYR2_IMG_BUF, BUNKER_3_PLYR2_IMG_BUF};
 
-// Binary search through 4 bunkers to find which one (if any) delta_x falls within.
-// Sets bunker_img_base_addr and adjusts delta_x to be relative to the matched bunker.
+// Binary search through 4 bunkers to find which one (if any) dx falls within.
+// Sets bunker_img_base_addr and adjusts *dx to be relative to the matched bunker.
 // right_margin: width of the object (22 for bullet/bomb, 22+alien_width for alien)
 // Returns: 0-3 = bunker found, 4 = no bunker
-unsigned char find_bunker_for_x(unsigned char right_margin)
+unsigned char find_bunker_for_x(int *dx, unsigned char right_margin)
 {
     unsigned char bn = 4;
-    if (delta_x >= 90)
-    { // 45+45
-        if (delta_x >= 135)
-        { // 45+45+45
+    if (*dx >= 90)
+    {
+        if (*dx >= 135)
+        {
             bn = 3;
-            delta_x -= 135;
+            *dx -= 135;
         }
-        else if (delta_x < 90 + right_margin)
+        else if (*dx < 90 + right_margin)
         {
             bn = 2;
-            delta_x -= 90;
+            *dx -= 90;
         }
     }
     else
     {
-        if (delta_x >= 45 && delta_x < 45 + right_margin)
+        if (*dx >= 45 && *dx < 45 + right_margin)
         {
             bn = 1;
-            delta_x -= 45;
+            *dx -= 45;
         }
-        else if (delta_x < right_margin)
+        else if (*dx < right_margin)
         {
             bn = 0;
         }
@@ -1114,7 +1097,6 @@ static void boot_init(void)
     level_completed = false; // current LEVEL/WAVE has been completed (all aliens terminated)
     srand(15);               // Initialize random # gen
     active_player = 0;       // 1st player (player 0) always goes first
-    skip = false;            // flag to skip splash screens and go straight to demo/play
 
     // Handle demo termination: cleanup sprites/scores for fresh game start
     // NOTE: do NOT clear demo_terminated here - main() needs it to skip splash_and_input
@@ -1168,6 +1150,7 @@ static void init_display(void)
 static void splash_and_input(void)
 {
     int i;
+    bool skip = false;
     static unsigned char splash_screen_toggle = 0;
     Game.play_mode = false;
     Game.num_players = 1;
@@ -1335,7 +1318,6 @@ static void init_sfx(void)
     silence_all_sfx();
     xreg(0, 1, 0x00, SFX_BASE_ADDR); // initialize PSG... set base address of xregs
 
-    dummy_read = 0;
     toggle_tones = 1;
     loops = 0;
     bullet_loops = 0;
@@ -1394,6 +1376,7 @@ static void init_sprites(void)
     static const unsigned bomb_img_bases[3] = {BOMB_SCREW_IMG_BASE, BOMB_SPIKE_IMG_BASE, BOMB_SAWTOOTH_IMG_BASE};
     int i, j;
     unsigned lives_spr_ptr, lives_x_pos;
+    unsigned bomb_image_ptr;
     unsigned char sprite_number = 0;
 
     // **** BUNKER SPRITE INIT ****
@@ -1606,7 +1589,6 @@ static void init_bomb_vars(void)
     bomb_speed = 4;
     bomb_reload_rate = BOMB_RELOAD_INITIAL;
     screw_bomb_cooldown = 0;
-    bomb_img_start_addr = 0;
 }
 
 static void init_saucer_vars(void)
@@ -1630,13 +1612,6 @@ static void init_collision_vars(void)
     bullet_bomb_hit = 0;
     bullet_saucer_hit = 0;
     bullet_boundary_hit = 0;
-    shot_overlap_top = 0;
-    shot_overlap_bottom = 0;
-    shot_column = 0;
-    bomb_top_row = 0;
-    bomb_rows = 0;
-    bomb_image_mem = BOMB_IMG_BASE;
-    bomb_micro_bunker_hit = false;
     bunker_num = 4;
 }
 
@@ -1697,9 +1672,7 @@ static void game_init(void)
     update_numerical_lives(!blink, Player[active_player].lives);
     print_string(29, 15, "WAVE", !slow);
     Player[active_player].level = 1;
-    update_wave_number(false); // false = print at bottom of screen
-
-    temp1 = temp2 = 0;
+    update_wave_number(false);
 }
 
 // Control loop: processes round results, handles level completion, player swapping, then runs play loop
@@ -1866,7 +1839,6 @@ static void reset_pre_play_vars(void)
     alien_hit = 0;
 
     // SFX state
-    dummy_read = 0;
     toggle_tones = 1;
     loops = 0;
     bullet_loops = 0;
@@ -1926,7 +1898,7 @@ static void control_loop(void)
 static void update_sprites(void)
 {
     int i;
-    // ###########################################################################################
+    unsigned bomb_image_ptr;
     // ##########################    UPDATE SPRITE CONFIG DATA    ################################
     // ###########################################################################################
 
@@ -2182,249 +2154,229 @@ static void bullet_move_spawn(void)
     // END BULLET MOVE/SPAWN
 }
 
-static void bullet_collision_detect(void)
+// Check bullet vs all 3 bombs for pixel-level collision
+static void bullet_vs_bombs(int bx0, int by0)
 {
     int i;
-    int bullet_x1;
-    unsigned char delta_rel_y;
-    // ###########################################################
-    // ###########     BULLET COLLISION DETECTION     ############
-    // ###########################################################
+    int overlap_top, overlap_bottom, col;
+    int top_row, rows;
+    unsigned bomb_image_mem;
 
-    // actions for this section
-    //      # after explosion, reset "exists" flag for impacted alien, bullet, bomb, saucer, etc.
-    //      # set [object name]collision flag "hit"
-    //      # start timer, change sprite to explosion for one or both of the objects colliding (both = bullet/alien, just gunner, just bunker)
-    //      # pause movement
-    //      # timer ends - reset collision flag, set image y to offscreen, restart movement
-
-    // For BOMBS, BUNKERS, ALIENS, SAUCERS, TOP BOUNDARY
-    //      DETECT & FLAG COLLISIONS, INITIATE EXPLOSIONS, START EXPLOSIION DURATION TIMERS, PERFORM BUNKER EROSION
-
-    // These bbox values are used for all collision detection, but y1 varies depending on
-    // ... object bullet is colliding with
-    bullet_x0 = bullet_x + 3;
-    bullet_x1 = bullet_x + 4;
-    bullet_y0 = bullet_y;
-    // see below for bullet_y1
-
-    // COLLISION BULLET hits BOMB (not BOMB to BULLET)
-    // ###############################################
-    if (bullet_hit == 0)
+    for (i = 0; i < NUM_BOMB_SPR; i++)
     {
-        for (i = 0; i < 3; i++)
-        { // loop through all bombs
-            if (Bomb[i].exists && (Bomb[i].hit == 0))
-            {
-                if (bullet_x0 >= Bomb[i].x0 && bullet_x0 < Bomb[i].x1)
-                {
-                    // This bbox for y1 is used for BULLET/BOMB COLLISION DETECTION and BOMB/BULLET CD ONLY
-                    bullet_y1 = bullet_y + 4;
-                    shot_overlap_top = bullet_y1 - Bomb[i].y;
-                    shot_overlap_bottom = Bomb[i].y1 - bullet_y0;
-                    shot_column = 2 + bullet_x0 - Bomb[i].x0;
-                    if (shot_overlap_bottom > 0 && shot_overlap_top > 0)
-                    { // then bullet overlaps bomb in y axis
-                        if (shot_overlap_top < 4)
-                        {
-                            bomb_top_row = 0;
-                            bomb_rows = shot_overlap_top;
-                        }
-                        else if (shot_overlap_bottom < 4)
-                        {
-                            bomb_top_row = 8 - shot_overlap_bottom;
-                            bomb_rows = shot_overlap_bottom;
-                        }
-                        else
-                        {
-                            bomb_top_row = bullet_y0 - Bomb[i].y;
-                            bomb_rows = 4;
-                        }
+        if (!Bomb[i].exists || Bomb[i].hit != 0)
+            continue;
+        if (bx0 < Bomb[i].x0 || bx0 >= Bomb[i].x1)
+            continue;
 
-                        bomb_image_mem = BOMB_IMG_BASE + (((i * 4) + Bomb[i].anim_frame) * SPR_8X8_SIZE);
-                        bullet_bomb_hit = bullet_bomb_micro_collision(bomb_image_mem, bomb_top_row, shot_column, bomb_rows);
-                    }
-                    if (bullet_bomb_hit == 1)
-                    {
-                        Bullet.explosion_ticks = BULLET_EXPL_TICKS;
-                        bullet_image_ptr = BULLET_EXPL_IMG_BASE;
-                    }
-                }
-            }
-        }
-    } // END BULLET HITS BOMB COLLISION DETECT
+        bullet_y1 = bullet_y + 4;
+        overlap_top = bullet_y1 - Bomb[i].y;
+        overlap_bottom = Bomb[i].y1 - by0;
+        col = 2 + bx0 - Bomb[i].x0;
+        if (overlap_bottom <= 0 || overlap_top <= 0)
+            continue;
 
-    // RESTORE - This bbox y1 is used for all but BOMB COLLISION DETECTION
-    bullet_y1 = bullet_y + 1; // bounding box is just one pixel at the tip of the spear
-
-    // COLLISION BULLET to BUNKER
-    // ##########################
-    // Macro CD y-axis
-    if (bullet_hit == 0)
-    {
-        delta_y = BUNKER_MACRO_BBOX_Y1 - bullet_y0;
-        if ((delta_y > 0) && (delta_y <= 16))
-        { // Macro check for y-axis
-            // Macro test x-axis where do we have overlap, if any?
-            delta_x = bullet_x0 - BUNKER_ZERO_X0;
-            // Macro CD x-axis -- at least partially inside left edge of 1st bunker and right edge of last bunker
-            // Last Bunker x1 + alien width, 3*45 + 22 + alien_width[alien_num] (45 = width bunker+gap)
-            if ((delta_x >= 0) && (delta_x < 45 + 45 + 45 + 22))
-            {
-                bunker_num = find_bunker_for_x(22);
-                if (bunker_num < 4)
-                {
-                    bunker_start_addr = bunker_img_base_addr + ((24 - delta_y) * 64) + (2 * (delta_x + 5)); // image offset is 5 px, 2 bytes/px, clear 2nd byte of 2 bytes/px
-                    if (bunker_bullet_micro_collision(bunker_start_addr) > 0)
-                    {
-                        bullet_micro_bunker_hit = 1;
-                        Bullet.explosion_ticks = BULLET_EXPL_TICKS;
-                        bullet_y -= 2; // this is to move explosion up to match the hole being made in bunker (the hole is bullet y - 2)
-                        bullet_image_ptr = BULLET_EXPL_IMG_BASE;
-                        erase_bunker_explos(bunker_start_addr - (64 * 2) - (2 * 3), BULLET_EXPL_IMG_BASE, 8);
-                    }
-                }
-            }
-        }
-    } // END BULLET BUNKER CD
-
-    // BULLET to ALIEN COLLISION
-    // ###########################
-    // NEW Bullet/alien colliion detect
-    // alien_binary_search_index array holds the alien #'s corresponding to the columns used in the decision tree
-    //      after each row is prcessed the array values are increment by +11 (e.g. starting at 5, then 16,27,38,49)
-    //      The indices into the Index_array are constant and based on the columns defined by the decision tree logic
-    delta_x = bullet_x0 - alien_ref_x;        // based on x increasing left to right, ref is left side of matrix
-    delta_y = bullet_y0 - (alien_ref_y - 64); // +??? for sprite offset, based on y increasing from top to bottom, ref is top of matrix
-    if ((bullet_hit == 0) && (delta_y >= 4) && (delta_y <= (64 + 12)))
-    { // 8 to account for alien x1
-        delta_rel_y = (uint8_t)delta_y & 0x0F;
-        alien_row_num = 4 - ((uint8_t)delta_y >> 4);
-        if (delta_x >= 0 && delta_x < INVADER_MTRX_WIDTH + 16)
+        if (overlap_top < 4)
         {
-            delta_rel_x = (uint8_t)delta_x & 0x0F; // get the bullet position relative to alien x (which is the remainder after divide by 16)
-            alien_col_num = (uint8_t)delta_x >> 4; // divide by 16 to get column number
-            hit_alien_idx = (alien_row_num * NUM_INVADER_COLS) + alien_col_num;
-            if (players_alien_exists[active_player][hit_alien_idx] == 1)
-            {
-                if (delta_rel_y < alien_bbox_y1[hit_alien_idx] && (delta_rel_y >= alien_bbox_y0[hit_alien_idx]))
-                    alien_y_hit = 1;
-                if (alien_update[hit_alien_idx] != alien_ref_update)
-                {
-                    // hit alien hasn't been updated, if moving right subtract 2, left add 2 to bbox
-                    if (Player[active_player].alien_x_incr == +2)
-                    { // moving aliens to the right, offset bbox to the left by 2
-                        if ((delta_rel_x >= alien_bbox_x0[hit_alien_idx] - 2) && (delta_rel_x < alien_bbox_x1[hit_alien_idx] - 2))
-                            alien_x_hit = 1;
-                    }
-                    else
-                    {
-                        if ((delta_rel_x >= alien_bbox_x0[hit_alien_idx] + 2) && (delta_rel_x < alien_bbox_x1[hit_alien_idx] + 2))
-                            alien_x_hit = 1;
-                    }
-                }
-                else
-                { // hit alien has already been updated to match reference pos
-                    if ((delta_rel_x >= alien_bbox_x0[hit_alien_idx]) && (delta_rel_x < alien_bbox_x1[hit_alien_idx]))
-                    {
-                        alien_x_hit = 1;
-                    }
-                }
-                alien_hit = alien_x_hit && alien_y_hit;
-                alien_x_hit = 0;
-                alien_y_hit = 0;
-                if (alien_hit == 1)
-                {
-                    alien_unoccupied_cols_per_row[active_player][alien_row_num]++; // count number of terminated aliens in each row & column
-                    alien_unoccupied_rows_per_col[active_player][alien_col_num]++;
-                    bullet_y = DISAPPEAR_Y; // disapper bullet
-                    // use explosion done time to delay spawning next bullet until alien explos is over
-                    Bullet.explosion_ticks = ALIEN_EXPL_TICKS;
-                    alien_explosion_ticks = ALIEN_EXPL_TICKS;
-                    // keep score
-                    // NOTE - score values are divided by 10 (LSD always zero)
-                    if (hit_alien_idx < 21)
-                        Player[active_player].score += 1;
-                    else if (hit_alien_idx < 43)
-                        Player[active_player].score += 2;
-                    else
-                        Player[active_player].score += 3;
-                    // enable SFX and reset SFX loop counter
-                    alien_explosion_sfx_enable = true;
-                    bullet_loops = 0;
-                    // load explosion parameters
-                    wave = 4;                // 0 sine, 1 square, 2 sawtooth, 3 triangle, 4 noise
-                    bullet_freq = 50;        // Hz * 3
-                    duty = 90;               // % = duty/256
-                    attack_volume_atten = 7; // max = 15 for each nibble
-                    attack_time = 2;
-                    decay_volume_atten = 11;
-                    decay_time = 1;
-                    release_time = 0;
-                    load_SFX_base_parameters(BULLET_SFX_BASE_ADDR);
-                }
-            }
+            top_row = 0;
+            rows = overlap_top;
         }
-    } // END BULLET TO ALIEN  COLLISION DETECT
+        else if (overlap_bottom < 4)
+        {
+            top_row = 8 - overlap_bottom;
+            rows = overlap_bottom;
+        }
+        else
+        {
+            top_row = by0 - Bomb[i].y;
+            rows = 4;
+        }
 
-    // COLLISION BULLET to SAUCER
-    // ##########################
+        bomb_image_mem = BOMB_IMG_BASE + (((i * 4) + Bomb[i].anim_frame) * SPR_8X8_SIZE);
+        bullet_bomb_hit = bullet_bomb_micro_collision(bomb_image_mem, top_row, col, rows);
+        if (bullet_bomb_hit == 1)
+        {
+            Bullet.explosion_ticks = BULLET_EXPL_TICKS;
+            bullet_image_ptr = BULLET_EXPL_IMG_BASE;
+        }
+    }
+}
+
+// Check bullet vs bunkers for macro then micro collision, erode on hit
+static void bullet_vs_bunker(int bx0, int by0)
+{
+    int dy, dx;
+    unsigned bunker_start_addr;
+    dy = BUNKER_MACRO_BBOX_Y1 - by0;
+    if (dy <= 0 || dy > 16)
+        return;
+
+    dx = bx0 - BUNKER_ZERO_X0;
+    if (dx < 0 || dx >= 45 + 45 + 45 + 22)
+        return;
+
+    bunker_num = find_bunker_for_x(&dx, 22);
+    if (bunker_num >= 4)
+        return;
+
+    bunker_start_addr = bunker_img_base_addr + ((24 - dy) * 64) + (2 * (dx + 5));
+    if (bunker_bullet_micro_collision(bunker_start_addr) > 0)
+    {
+        bullet_micro_bunker_hit = 1;
+        Bullet.explosion_ticks = BULLET_EXPL_TICKS;
+        bullet_y -= 2;
+        bullet_image_ptr = BULLET_EXPL_IMG_BASE;
+        erase_bunker_explos(bunker_start_addr - (64 * 2) - (2 * 3), BULLET_EXPL_IMG_BASE, 8);
+    }
+}
+
+// Check bullet vs alien matrix
+static void bullet_vs_alien(int bx0, int by0)
+{
+    int dx, dy;
+    unsigned char drel_y, drel_x;
+
+    dx = bx0 - alien_ref_x;
+    dy = by0 - (alien_ref_y - 64);
+    if (dy < 4 || dy > (64 + 12))
+        return;
+
+    drel_y = (uint8_t)dy & 0x0F;
+    alien_row_num = 4 - ((uint8_t)dy >> 4);
+    if (dx < 0 || dx >= INVADER_MTRX_WIDTH + 16)
+        return;
+
+    drel_x = (uint8_t)dx & 0x0F;
+    alien_col_num = (uint8_t)dx >> 4;
+    hit_alien_idx = (alien_row_num * NUM_INVADER_COLS) + alien_col_num;
+    if (players_alien_exists[active_player][hit_alien_idx] != 1)
+        return;
+
+    if (drel_y < alien_bbox_y1[hit_alien_idx] && drel_y >= alien_bbox_y0[hit_alien_idx])
+        alien_y_hit = 1;
+
+    if (alien_update[hit_alien_idx] != alien_ref_update)
+    {
+        // Alien not yet updated this pass -- compensate bbox for movement direction
+        signed char offset = (Player[active_player].alien_x_incr == +2) ? -2 : +2;
+        if (drel_x >= alien_bbox_x0[hit_alien_idx] + offset && drel_x < alien_bbox_x1[hit_alien_idx] + offset)
+            alien_x_hit = 1;
+    }
+    else
+    {
+        if (drel_x >= alien_bbox_x0[hit_alien_idx] && drel_x < alien_bbox_x1[hit_alien_idx])
+            alien_x_hit = 1;
+    }
+
+    alien_hit = alien_x_hit && alien_y_hit;
+    alien_x_hit = 0;
+    alien_y_hit = 0;
+
+    if (alien_hit == 1)
+    {
+        alien_unoccupied_cols_per_row[active_player][alien_row_num]++;
+        alien_unoccupied_rows_per_col[active_player][alien_col_num]++;
+        bullet_y = DISAPPEAR_Y;
+        Bullet.explosion_ticks = ALIEN_EXPL_TICKS;
+        alien_explosion_ticks = ALIEN_EXPL_TICKS;
+        // Score: magenta=10, blue=20, green=30 (stored /10)
+        if (hit_alien_idx < 21)
+            Player[active_player].score += 1;
+        else if (hit_alien_idx < 43)
+            Player[active_player].score += 2;
+        else
+            Player[active_player].score += 3;
+        // Explosion SFX
+        alien_explosion_sfx_enable = true;
+        bullet_loops = 0;
+        wave = 4;
+        bullet_freq = 50;
+        duty = 90;
+        attack_volume_atten = 7;
+        attack_time = 2;
+        decay_volume_atten = 11;
+        decay_time = 1;
+        release_time = 0;
+        load_SFX_base_parameters(BULLET_SFX_BASE_ADDR);
+    }
+}
+
+// Check bullet vs saucer, handle score display timer
+static void bullet_vs_saucer(int bx0, int bx1, int by1)
+{
     if (Saucer.score_start_time > 0)
         Saucer.score_start_time--;
     if (Saucer.score_start_time == 1)
-    { // since it's a one time event, need to use value = 1 (not 0)
         saucer_expl_score_image_ptr = saucer_score.image_ptr;
-    }
-    if (bullet_hit == 0 && Saucer.exists)
-    {
-        if (AABB_OVERLAP(
-                bullet_x0, bullet_y, bullet_x1, bullet_y1,
-                Saucer.x + SAUCER_BBOX_X0, SAUCER_BASE_Y + SAUCER_BBOX_Y0,
-                Saucer.x + SAUCER_BBOX_X1, SAUCER_BASE_Y + SAUCER_BBOX_Y1))
-        {
-            bullet_saucer_hit = 1;
-            Saucer.sfx = true;
-            Bullet.explosion_ticks = SAUCER_EXPL_TICKS;
-            Saucer.score_start_time = SAUCER_EXPL_TICKS / 2;
-            Saucer.explosion_x = Saucer.x - 8;
-            Saucer.exists = false;
-            bullet_y = DISAPPEAR_Y;
-            Saucer.next_spawn_time = 0;
-            Saucer.spawn_enable = false;
-            Player[active_player].score += saucer_score_table[Player[active_player].bullets_fired];
-            switch (saucer_score_table[Player[active_player].bullets_fired])
-            {
-            case 5:
-                saucer_score.image_ptr = SAUCER_SCORE50_IMG_BASE;
-                break;
-            case 10:
-                saucer_score.image_ptr = SAUCER_SCORE100_IMG_BASE;
-                break;
-            case 15:
-                saucer_score.image_ptr = SAUCER_SCORE150_IMG_BASE;
-                break;
-            case 30:
-                saucer_score.image_ptr = SAUCER_SCORE300_IMG_BASE;
-                break;
-            }
-        }
-    } // END BULLET TO SAUCER COLLISION DETECT
 
-    // COLLISION BULLET to UPPER BNDRY
-    // ###############################
-    if ((bullet_y < TOP_BOUNDARY) && (bullet_boundary_hit == 0))
+    if (bullet_hit != 0 || !Saucer.exists)
+        return;
+
+    if (!AABB_OVERLAP(
+            bx0, bullet_y, bx1, by1,
+            Saucer.x + SAUCER_BBOX_X0, SAUCER_BASE_Y + SAUCER_BBOX_Y0,
+            Saucer.x + SAUCER_BBOX_X1, SAUCER_BASE_Y + SAUCER_BBOX_Y1))
+        return;
+
+    bullet_saucer_hit = 1;
+    Saucer.sfx = true;
+    Bullet.explosion_ticks = SAUCER_EXPL_TICKS;
+    Saucer.score_start_time = SAUCER_EXPL_TICKS / 2;
+    Saucer.explosion_x = Saucer.x - 8;
+    Saucer.exists = false;
+    bullet_y = DISAPPEAR_Y;
+    Saucer.next_spawn_time = 0;
+    Saucer.spawn_enable = false;
+    Player[active_player].score += saucer_score_table[Player[active_player].bullets_fired];
+    switch (saucer_score_table[Player[active_player].bullets_fired])
+    {
+    case 5:
+        saucer_score.image_ptr = SAUCER_SCORE50_IMG_BASE;
+        break;
+    case 10:
+        saucer_score.image_ptr = SAUCER_SCORE100_IMG_BASE;
+        break;
+    case 15:
+        saucer_score.image_ptr = SAUCER_SCORE150_IMG_BASE;
+        break;
+    case 30:
+        saucer_score.image_ptr = SAUCER_SCORE300_IMG_BASE;
+        break;
+    }
+}
+
+static void bullet_collision_detect(void)
+{
+    int bx0 = bullet_x + 3;
+    int bx1 = bullet_x + 4;
+    int by0 = bullet_y;
+    bullet_x0 = bx0;
+    bullet_y0 = by0;
+
+    if (bullet_hit == 0)
+        bullet_vs_bombs(bx0, by0);
+
+    bullet_y1 = bullet_y + 1; // tip-of-bullet bbox for remaining checks
+
+    if (bullet_hit == 0)
+        bullet_vs_bunker(bx0, by0);
+    if (bullet_hit == 0)
+        bullet_vs_alien(bx0, by0);
+
+    bullet_vs_saucer(bx0, bx1, bullet_y1);
+
+    // Bullet vs upper boundary
+    if (bullet_y < TOP_BOUNDARY && bullet_boundary_hit == 0)
     {
         bullet_boundary_hit = 1;
         Bullet.explosion_ticks = BULLET_EXPL_TICKS;
-        bullet_image_ptr = BULLET_EXPL_IMG_BASE; // Boundary explosion address
+        bullet_image_ptr = BULLET_EXPL_IMG_BASE;
     }
-    // END BULLET COLLISION DETECT/HANDLER
 }
 
 static void bomb_move_spawn_all(void)
 {
-    // ##############################################
-    // #############   BOMB MOVE/SPAWN   ############
+    unsigned char delta_rel_x;
     // ##############################################
 
     if (Game.bomb_spawn_time > 0)
@@ -2543,6 +2495,12 @@ static void bomb_move_spawn_all(void)
 static void bomb_collision_detect(void)
 {
     unsigned bunker_start_addr1, bunker_start_addr2;
+    int shot_overlap_top, shot_overlap_bottom, shot_column;
+    int bomb_top_row, bomb_rows;
+    unsigned bomb_image_mem;
+    unsigned int bomb_img_start_addr;
+    bool bomb_micro_bunker_hit;
+    int delta_x, delta_y;
 
     if (active_bomb_idx >= NUM_BOMB_SPR)
         return;
@@ -2609,7 +2567,7 @@ static void bomb_collision_detect(void)
             // Less than last Bunker x1 and greater than num px's to Bomb X1 (3)...45 = width bunker+gap, 27 = distance from bunker x to bunker x1
             if ((delta_x > 2) && (delta_x < 45 + 45 + 45 + 27))
             {
-                bunker_num = find_bunker_for_x(27);
+                bunker_num = find_bunker_for_x(&delta_x, 27);
                 if (bunker_num < 4)
                 {
                     // bomb image offset = (bomb# * 4 + anim#) * sprite_size + 2px byte offset
@@ -2846,6 +2804,7 @@ static void terminate_bombs(void)
 
 static void terminate_gunner(void)
 {
+    unsigned char dummy_read;
     if (Gunner.explosion_ticks > 0)
         Gunner.explosion_ticks--;
     if (Gunner.state == GUNNER_EXPLODING)
@@ -3134,6 +3093,8 @@ static void alien_bunker_collision(void)
 {
     unsigned char bunker_num_col;
     unsigned char lower_half_bunker;
+    unsigned bunker_start_addr;
+    int delta_x;
     // ######################################################################
     // ###########     ALIEN COLLISION WITH BUNKER DETECTION     ############
     // ######################################################################
@@ -3150,7 +3111,7 @@ static void alien_bunker_collision(void)
         // Last Bunker x1 + alien width, 3*45 + 22 + alien_width[alien_num] (45 = width bunker+gap)
         if ((delta_x > 0) && (delta_x < 45 + 45 + 45 + 22 + alien_width[alien_num]))
         {
-            bunker_num = find_bunker_for_x(22 + alien_width[alien_num]);
+            bunker_num = find_bunker_for_x(&delta_x, 22 + alien_width[alien_num]);
             if (bunker_num < 4)
             {
                 if (delta_x <= alien_width[alien_num])
