@@ -2359,17 +2359,17 @@ static void handle_keyboard(void)
                 {
                     Game.restart = true;
                 }
-                else if (act_on_coin(check_coin()))
-                {
-                    Game.restart = true;
-                    break;
-                }
                 handled_key = true;
             }
             else
             {
                 handled_key = false;
             }
+        }
+        if (act_on_coin(check_coin()))
+        {
+            Game.restart = true;
+            break;
         }
     } while (paused);
 }
