@@ -145,7 +145,7 @@ struct
     int y0;
     int y1;
     unsigned char drop_rel_y;
-} Bomb[NUM_BOMB_SPR + 1]; // need an extra slot for the case where last updated = 3 (no bomb was updated)
+} Bomb[NUM_BOMB_SPR];
 
 struct
 {
@@ -511,6 +511,36 @@ unsigned char print_string(unsigned row, unsigned col, char *str, bool slow)
     return 0;
 }
 
+// Convert unsigned int to decimal string, right-aligned in buf of given width
+void uint_to_str(unsigned val, char *buf, unsigned char width)
+{
+    unsigned char i = width;
+    while (i > 0)
+    {
+        i--;
+        buf[i] = (char)(val % 10) + '0';
+        val /= 10;
+    }
+}
+
+// Save high score to USB drive
+void save_hiscore(void)
+{
+    fptr = fopen("raiders.hiscore", "wb+");
+    fwrite(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
+    fclose(fptr);
+}
+
+// Print "PLAYER <1>" or "PLAYER <2>" based on active_player
+void print_player_label(unsigned char row, unsigned char col, bool use_slow)
+{
+    print_string(row, col, "PLAYER <", use_slow);
+    if (active_player == 0)
+        print_string(row, col + 8, "1>", use_slow);
+    else
+        print_string(row, col + 8, "2>", use_slow);
+}
+
 static void erase_xram_sprite_config(void)
 {
     unsigned i;
@@ -564,10 +594,10 @@ void erase_top_of_bunker(unsigned mem_start, unsigned char num_col, unsigned cha
 // BLAST HOLE IN BUNKER at location of bullet or bomb explosion
 void erase_bunker_explos(unsigned mem_start, unsigned explos_img_base, unsigned char num_cols)
 {
-    unsigned char i = 0, temp1;
-    RIA.addr1 = mem_start; // template image starting address
+    unsigned char i, j, temp1;
+    RIA.addr1 = mem_start;
     RIA.addr0 = explos_img_base;
-    while (i < num_cols)
+    for (i = 0; i < num_cols; i++)
     {
         if (i % 2 == 0)
         {
@@ -575,45 +605,25 @@ void erase_bunker_explos(unsigned mem_start, unsigned explos_img_base, unsigned 
             RIA.step0 = 16;
         }
         else
-        { // reverse vertical direction, every other column
+        {
             RIA.step1 = -64;
             RIA.step0 = -16;
         }
-        if (RIA.rw0 > 0)
-            RIA.rw1 = 0;
-        else
-            temp1 = RIA.rw1;
-        if (RIA.rw0 > 0)
-            RIA.rw1 = 0;
-        else
-            temp1 = RIA.rw1;
-        if (RIA.rw0 > 0)
-            RIA.rw1 = 0;
-        else
-            temp1 = RIA.rw1;
-        if (RIA.rw0 > 0)
-            RIA.rw1 = 0;
-        else
-            temp1 = RIA.rw1;
-        if (RIA.rw0 > 0)
-            RIA.rw1 = 0;
-        else
-            temp1 = RIA.rw1;
-        if (RIA.rw0 > 0)
-            RIA.rw1 = 0;
-        else
-            temp1 = RIA.rw1;
-        if (RIA.rw0 > 0)
-            RIA.rw1 = 0;
-        else
-            temp1 = RIA.rw1;
+        // Erase 7 vertical pixels where explosion mask is non-zero
+        for (j = 0; j < 7; j++)
+        {
+            if (RIA.rw0 > 0)
+                RIA.rw1 = 0;
+            else
+                temp1 = RIA.rw1;
+        }
+        // Advance to next column
         RIA.step0 = 2;
-        RIA.step1 = 2; // move to next column in memory, on next write
+        RIA.step1 = 2;
         if (RIA.rw0 > 0)
             RIA.rw1 = 0;
         else
             temp1 = RIA.rw1;
-        i++;
     }
 }
 
@@ -761,17 +771,7 @@ void update_wave_number(bool print_at_top)
 
 void update_score_string(unsigned int score)
 {
-    unsigned calc_1, calc_2;
-    calc_1 = score;
-    calc_2 = calc_1;
-    calc_1 /= 100;                           // 1000's digit
-    score_value_str[0] = (char)calc_1 + '0'; // convert to ascii char, built "score" string
-    calc_2 = (calc_2 - (calc_1 * 100));
-    calc_1 = calc_2 / 10; // 100's digit
-    score_value_str[1] = (char)calc_1 + '0';
-    calc_2 = (calc_2 - (calc_1 * 10));
-    calc_1 = calc_2; // 10's digit
-    score_value_str[2] = (char)calc_1 + '0';
+    uint_to_str(score, score_value_str, 3); // fills positions 0-2, position 3 stays '0'
 }
 
 void update_score_board()
@@ -910,7 +910,7 @@ unsigned char find_bunker_for_x(unsigned char right_margin)
     }
     if (bn < 4)
     {
-        bunker_img_base_addr = (1 - active_player) * bunker_plyr1_img[bn] + active_player * bunker_plyr2_img[bn];
+        bunker_img_base_addr = active_player ? bunker_plyr2_img[bn] : bunker_plyr1_img[bn];
     }
     return bn;
 }
@@ -1129,25 +1129,19 @@ static void boot_init(void)
 }
 
 // Initialize graphics, show splash screens, get player selection
-static void splash_and_input(void)
+// Forward declaration for init_sprite (defined later with init_sprites)
+static void init_sprite(unsigned cfg_addr, unsigned x, unsigned y, unsigned img, unsigned char log_size);
+
+// One-time display hardware initialization: VGA canvas, character mode, sprite mode, input
+static void init_display(void)
 {
     int i;
-    static unsigned char splash_screen_toggle = 0;
-    Game.play_mode = false; // press 1 or 2 (players, if no input is received, then demo mode is initiated
-    Game.num_players = 1;   // 0 = 1 player, 1 = 2 players
+    xreg_vga_canvas(1);
 
-    // #######################################################
-    // ##############    INITIALIZE GRAPHICS    ##############
-    // #######################################################
-    // screen is 320 x 240 pixels screen OR 40 cols by 30 rows characters
-    xreg_vga_canvas(1); // resets all mode config — screen is blank
-
-    // Clear screen memory and sprite config BEFORE enabling display modes
-    // so no garbage is ever visible
     initialize_char_screen();
     erase_xram_sprite_config();
 
-    // Config character mode
+    // Character mode config
     xram0_struct_set(0xFF00, vga_mode1_config_t, x_wrap, false);
     xram0_struct_set(0xFF00, vga_mode1_config_t, y_wrap, false);
     xram0_struct_set(0xFF00, vga_mode1_config_t, x_pos_px, 0);
@@ -1155,36 +1149,32 @@ static void splash_and_input(void)
     xram0_struct_set(0xFF00, vga_mode1_config_t, width_chars, 40);
     xram0_struct_set(0xFF00, vga_mode1_config_t, height_chars, 30);
     xram0_struct_set(CHAR_MODE_CFG, vga_mode1_config_t, xram_data_ptr, CHAR_SCREEN_BASE);
-    xram0_struct_set(0xFF00, vga_mode1_config_t, xram_palette_ptr, 0xFFFF); // using built-in color palette
-    xram0_struct_set(0xFF00, vga_mode1_config_t, xram_font_ptr, 0x9980);    // address of old school 5x7 font array
-    // Turn on CHARACTER graphics mode
-    xreg_vga_mode(1, 3, CHAR_MODE_CFG, 1); // setup char mode in plane 1
+    xram0_struct_set(0xFF00, vga_mode1_config_t, xram_palette_ptr, 0xFFFF);
+    xram0_struct_set(0xFF00, vga_mode1_config_t, xram_font_ptr, 0x9980);
+    xreg_vga_mode(1, 3, CHAR_MODE_CFG, 1);
 
-    // Config sprites for splash screens (scoring table)
-    ptr = SPR_CFG_BASE + (5 * sizeof(vga_mode4_sprite_t)); // SAUCER FIRST
-    xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, 96);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, SAUCER_IMG_BASE);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+    // Splash screen sprites (saucer + 3 alien types)
+    init_sprite(SPR_CFG_ADDR(5), 96, DISAPPEAR_Y, SAUCER_IMG_BASE, 4);
     for (i = 0; i < 3; i++)
-    {
-        ptr = SPR_CFG_BASE + ((6 + i) * sizeof(vga_mode4_sprite_t)); // THEN 3 ALIENS
-        xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, 96);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, INVADER_IMG_ALIEN_GREEN + (i * 2 * SPR_16X16_SIZE));
-        xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
-    }
-    // Turn on SPRITE graphics mode
-    xreg_vga_mode(4, 0, SPR_CFG_BASE, TOTAL_NUM_SPR); // setup sprite mode in plane 0
-    // Turn on USB keyboard and gamepad I/O (must be before any delay_with_input calls)
+        init_sprite(SPR_CFG_ADDR(6 + i), 96, DISAPPEAR_Y,
+                    INVADER_IMG_ALIEN_GREEN + (i * 2 * SPR_16X16_SIZE), 4);
+
+    xreg_vga_mode(4, 0, SPR_CFG_BASE, TOTAL_NUM_SPR);
     xreg_ria_keyboard(KEYBOARD_INPUT);
     xreg(0, 0, 2, 0xFF80U);
     paused = false;
+}
 
-    // ######################################
-    // #######   SPLASH SCREENS   ###########
+static void splash_and_input(void)
+{
+    int i;
+    static unsigned char splash_screen_toggle = 0;
+    Game.play_mode = false;
+    Game.num_players = 1;
+
+    init_display();
+
+    // SPLASH SCREENS
     // load initial splash screen (scoring table), start with common/static elements used on (most) all screens
     print_string(0, 6, "SCORE<1> HI-SCORE SCORE<2>", !slow);
     print_string(2, 7, "0000", !slow);
@@ -1388,36 +1378,37 @@ static void init_sfx(void)
     load_SFX_base_parameters(ALIEN_MARCH_SFX_BASE_ADDR);
 }
 
+// Configure a single sprite in XRAM: position, image pointer, and size
+static void init_sprite(unsigned cfg_addr, unsigned x, unsigned y, unsigned img, unsigned char log_size)
+{
+    xram0_struct_set(cfg_addr, vga_mode4_sprite_t, x_pos_px, x);
+    xram0_struct_set(cfg_addr, vga_mode4_sprite_t, y_pos_px, y);
+    xram0_struct_set(cfg_addr, vga_mode4_sprite_t, xram_sprite_ptr, img);
+    xram0_struct_set(cfg_addr, vga_mode4_sprite_t, log_size, log_size);
+    xram0_struct_set(cfg_addr, vga_mode4_sprite_t, has_opacity_metadata, false);
+}
+
 // Initialize all sprite configurations in XRAM
 static void init_sprites(void)
 {
+    static const unsigned bomb_img_bases[3] = {BOMB_SCREW_IMG_BASE, BOMB_SPIKE_IMG_BASE, BOMB_SAWTOOTH_IMG_BASE};
     int i, j;
-    unsigned bunker_x_pos;
-    unsigned lives_spr_ptr, lives_x_pos, lives_y_pos;
+    unsigned lives_spr_ptr, lives_x_pos;
     unsigned char sprite_number = 0;
 
     // **** BUNKER SPRITE INIT ****
     for (i = 0; i < NUM_OF_BUNKER_SPR; i++)
     {
-        ptr = SPR_CFG_BASE + ((BUNKER_FIRST_SPR_NUM + i) * sizeof(vga_mode4_sprite_t));
-        bunker_x_pos = BUNKER_ZERO_X + (i * BUNKER_X_SPACING);
-        bunker_img_ptr = BUNKER_0_PLYR1_IMG_BUF + (SPR_32X32_SIZE * i);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, bunker_x_pos);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, BUNKER_Y);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, bunker_img_ptr);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 5);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+        init_sprite(SPR_CFG_ADDR(BUNKER_FIRST_SPR_NUM + i),
+                    BUNKER_ZERO_X + (i * BUNKER_X_SPACING), BUNKER_Y,
+                    BUNKER_0_PLYR1_IMG_BUF + (SPR_32X32_SIZE * i), 5);
         sprite_number++;
     }
     bunker_img_ptr = BUNKER_0_PLYR1_IMG_BUF;
 
     // **** SAUCER BIG EXPLOSION SPRITE INIT ****
-    ptr = SPR_CFG_BASE + (SAUCER_EXPLOS_FIRST_SPR_NUM * sizeof(vga_mode4_sprite_t));
-    xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, DISAPPEAR_X);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, SAUCER_BASE_Y);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, saucer_expl_score_image_ptr);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 5);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+    init_sprite(SPR_CFG_ADDR(SAUCER_EXPLOS_FIRST_SPR_NUM),
+                DISAPPEAR_X, SAUCER_BASE_Y, saucer_expl_score_image_ptr, 5);
     sprite_number++;
 
     // **** INVADER SPRITE MATRIX INIT ****
@@ -1428,13 +1419,9 @@ static void init_sprites(void)
         alien_y = alien_ref_y + ((int16_t)INVADER_Y_SPACING * ((int16_t)alien_row_num - 1));
         for (alien_col_num = 0; alien_col_num < NUM_INVADER_COLS; alien_col_num++)
         {
-            alien_x = alien_ref_x + (alien_col_num * INVADER_X_SPACING);
-            ptr = SPR_CFG_BASE + (sprite_number++ * sizeof(vga_mode4_sprite_t));
-            xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, DISAPPEAR_X);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, alien_y);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, alien_img_ptr[alien_anim][alien_num]);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+            init_sprite(SPR_CFG_ADDR(sprite_number++),
+                        DISAPPEAR_X, alien_y,
+                        alien_img_ptr[alien_anim][alien_num], 4);
             alien_num++;
         }
         alien_col_num = 0;
@@ -1446,29 +1433,20 @@ static void init_sprites(void)
     alien_col_num = NUM_INVADER_COLS;
 
     // **** SAUCER SPRITE INIT ****
-    ptr = SPR_CFG_BASE + (sprite_number++ * sizeof(vga_mode4_sprite_t));
-    xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, DISAPPEAR_X);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, SAUCER_BASE_Y);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, SAUCER_IMG_BASE);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+    init_sprite(SPR_CFG_ADDR(sprite_number++),
+                DISAPPEAR_X, SAUCER_BASE_Y, SAUCER_IMG_BASE, 4);
 
     // **** GUNNER SPRITE INIT ****
     Gunner.y = DISAPPEAR_Y;
     gunner_image_ptr = GUNNER_PLYR1_IMG_BASE;
-    ptr = SPR_CFG_BASE + ((sprite_number++) * (sizeof(vga_mode4_sprite_t)));
-    xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, Gunner.x);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, Gunner.y);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, gunner_image_ptr);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+    init_sprite(SPR_CFG_ADDR(sprite_number++),
+                Gunner.x, Gunner.y, gunner_image_ptr, 4);
 
     // **** LIVES SPRITE INIT ****
-    for (i = 0; i < 2 + 1; i++)
+    for (i = 0; i < 3; i++)
     {
         for (j = 0; j < 4; j++)
         {
-            lives_y_pos = DISAPPEAR_Y;
             if (j == 3)
             {
                 lives_spr_ptr = LIVES_BONUS_IMG_BASE;
@@ -1484,12 +1462,8 @@ static void init_sprites(void)
                 lives_spr_ptr = GUNNER_PLYR2_IMG_BASE;
                 lives_x_pos = LIVES_P2_X_BASE + (LIVES_X_SPACING * j);
             }
-            ptr = SPR_CFG_BASE + ((sprite_number++) * (sizeof(vga_mode4_sprite_t)));
-            xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, lives_x_pos);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, lives_y_pos);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, lives_spr_ptr);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 4);
-            xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+            init_sprite(SPR_CFG_ADDR(sprite_number++),
+                        lives_x_pos, DISAPPEAR_Y, lives_spr_ptr, 4);
         }
     }
 
@@ -1497,100 +1471,35 @@ static void init_sprites(void)
     bullet_y_base = GUNNER_Y_BASE + 2;
     bullet_x_path = Gunner.x + 4;
     bullet_x = bullet_x_path;
-    bullet_y = bullet_y_base;
     bullet_y = DISAPPEAR_Y;
     bullet_image_ptr = BULLET_IMG_BASE;
-    ptr = SPR_CFG_BASE + (BULLET_FIRST_SPR_NUM * sizeof(vga_mode4_sprite_t));
-    xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, bullet_x);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, bullet_y);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, bullet_image_ptr);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 3);
-    xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+    init_sprite(SPR_CFG_ADDR(BULLET_FIRST_SPR_NUM),
+                bullet_x, bullet_y, bullet_image_ptr, 3);
     sprite_number++;
 
     // **** BOMB SPRITES INIT ****
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < NUM_BOMB_SPR; i++)
     {
-        ptr = SPR_CFG_BASE + ((BOMB_FIRST_SPR_NUM + i) * sizeof(vga_mode4_sprite_t));
-        switch (i)
-        {
-        case 0:
-            bomb_image_ptr = BOMB_SCREW_IMG_BASE + (Bomb[i].anim_frame * SPR_8X8_SIZE);
-            break;
-        case 1:
-            bomb_image_ptr = BOMB_SPIKE_IMG_BASE + (Bomb[i].anim_frame * SPR_8X8_SIZE);
-            break;
-        case 2:
-            bomb_image_ptr = BOMB_SAWTOOTH_IMG_BASE + (Bomb[i].anim_frame * SPR_8X8_SIZE);
-            break;
-        }
-        xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, Bomb[i].x);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, Bomb[i].y);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, bomb_image_ptr);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, log_size, 3);
-        xram0_struct_set(ptr, vga_mode4_sprite_t, has_opacity_metadata, false);
+        bomb_image_ptr = bomb_img_bases[i] + (Bomb[i].anim_frame * SPR_8X8_SIZE);
+        init_sprite(SPR_CFG_ADDR(BOMB_FIRST_SPR_NUM + i),
+                    Bomb[i].x, Bomb[i].y, bomb_image_ptr, 3);
         sprite_number++;
     }
 }
 
-static void game_init(void)
+static void init_alien_vars(void)
 {
     int i, j;
 
-    if (Game.num_players == 0)
-        print_string(2, 27, "    ", !slow);
-
-    init_player_state();
-
-    // GAME VARS
-    round_is_over = false;
-    another_player = false;
-    current_time = 0;
-    // Use 'exists' flag to indicate whether or not each player is alive vs dead
-    Player[0].exists = 1;
-    Player[0].lives = 3; // range: 0-4 more, #1-#3 are active gunner + 2 more, #4 is a bonus life added after a certain score
-    Player[1].exists = Game.num_players;
-    Player[1].lives = Game.num_players * 3;
-    if (Game.num_players == 1)
-        another_player = true;
-
-    clear_char_screen(7, 22); // clear the game title and scoring table (play area) of the screen
-    for (i = 0; i < 4; i++)
-    { // and clear sprites from SCORING TABLE
-        ptr = SPR_CFG_BASE + ((5 + i) * sizeof(vga_mode4_sprite_t));
-        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
-    }
-
-    if (Game.num_players == 1)
-    {
-        print_string(6, 14, "PLAYER <1>", !slow);
-    }
-    else
-    {
-        print_string(6, 14, "  READY?  ", !slow);
-    }
-    if (coin_delay(120))
-        return;
-    print_string(6, 14, "          ", !slow);
-
-    // Restore all bunker images to pristine state by copying template bunker to 8 bunker image buffers, 4 for each player
-    // ... do this at boot up and when a new level is started for a given player
-    restore_bunkers(0); // plyr 1
-    restore_bunkers(1); // plyr 2
-
-    // ALIEN ARRAY VARS
-    // calc and store RELATIVE POSITION CONSTANTS for each ALIEN MATRIX POSITION (relative to matrix reference)
-    // alien_ref_x pos changes every tick, Alien_rel are fixed and relative to reference
+    // Relative position constants for each alien matrix position
     for (i = 0; i < NUM_INVADER_ROWS; i++)
-    {
         for (j = 0; j < NUM_INVADER_COLS; j++)
         {
             alien_rel_x[(i * NUM_INVADER_COLS) + j] = j * 16;
             alien_rel_y[(i * NUM_INVADER_COLS) + j] = i * -16;
         }
-    }
 
-    // CREATE ARRAY of CONSTANT Bounding Box (BBOX) VALUES and INITIALIZE "UPDATE" FLAG to TRUE
+    // Bounding box values per alien type
     for (i = 0; i < NUM_ALIEN_SPR; i++)
     {
         alien_update[i] = true;
@@ -1598,7 +1507,7 @@ static void game_init(void)
         alien_bbox_y1[i] = 12;
         if (i < 22)
         {
-            alien_bbox_x0[i] = INVADER_MAG_BBOX_X0; // for CD, remainder of (Bullet_x - Alien_ref_x)/16 s/b between x0 and x1, +/-2 based on update flag
+            alien_bbox_x0[i] = INVADER_MAG_BBOX_X0;
             alien_bbox_x1[i] = INVADER_MAG_BBOX_X1;
             alien_width[i] = 12;
         }
@@ -1616,7 +1525,6 @@ static void game_init(void)
         }
     }
 
-    // OTHER ALIEN VARS
     alien_x = INVADER_MTRX_START_X;
     alien_y = INVADER_MTRX_B_START_Y;
     alien_hit = 0;
@@ -1624,108 +1532,159 @@ static void game_init(void)
     alien_y_hit = 0;
     alien_explosion_sfx_enable = false;
     alien_march_sfx_enable = true;
-    alien_march_sfx_timer = 100; // prevents premature start of SFX when timer = 0
+    alien_march_sfx_timer = 100;
     alien_explosion_done = false;
     alien_ref_x = INVADER_MTRX_START_X;
     alien_ref_update = true;
-    alien_ref_y = INVADER_MTRX_B_START_Y; // initial value changes with each increase in level for several (8?) cycles then repeats
+    alien_ref_y = INVADER_MTRX_B_START_Y;
     alien_y_incr = 0;
-    alien_1st_col_abs_x = INVADER_MTRX_START_X + 0;
+    alien_1st_col_abs_x = INVADER_MTRX_START_X;
     alien_row_num = 5;
     alien_col_num = NUM_INVADER_COLS;
     hit_alien_idx = 0;
     alien_last_col_abs_x = INVADER_MTRX_START_X + 176;
-    alien_col_bomb_0 = NUM_INVADER_COLS; // col from which bomb 0 is dropped, default is no column
+    alien_col_bomb_0 = NUM_INVADER_COLS;
     alien_drop = 0;
     alien_landed = false;
     alien_index_wrapped = 0;
     skip_alien_sprite_update = true;
+}
 
-    // GUNNER VARS Init
+static void init_gunner_vars(void)
+{
     Gunner.state = GUNNER_SPAWNING;
     Gunner.explosion_ticks = 0;
     Gunner.sfx = false;
     Gunner.x = LIVES_P1_X_BASE;
-    Gunner.direction_right = false; // game mode direction from keybd
+    Gunner.direction_right = false;
     Gunner.direction_left = false;
-    Gunner.loaded = 1; // 1 = gun is armed/loaded
+    Gunner.loaded = 1;
     Gunner.shoot = false;
     gunner_demo_direction_right = false;
+}
 
-    // Bullet VAR init
+static void init_bullet_vars(void)
+{
     Bullet.exists = false;
     Bullet.explosion_ticks = BULLET_EXPL_TICKS;
-
-    // Bullet.sfx = false;
     Bullet.reload = 0;
     Bullet.spawn_enable = true;
-    Bullet.anim_frame = 0; // image # 0 = bullet image, 1 = explosion
+    Bullet.anim_frame = 0;
     Bullet.x = Gunner.x + 4;
     Bullet.y = GUNNER_Y_BASE + 2;
-    Bullet.x_base = GUNNER_P1_X_BASE + 4; // starting x,y position (
-    Bullet.x_path = 0;                    // retains x position once bullet leaves the barrel
+    Bullet.x_base = GUNNER_P1_X_BASE + 4;
+    Bullet.x_path = 0;
     Bullet.y_base = GUNNER_Y_BASE + 2;
+}
 
-    // BOMB INITIALIZATION
+static void init_bomb_vars(void)
+{
+    int i;
     for (i = 0; i < NUM_BOMB_SPR; i++)
-    { // i cycles thru bomb types, 0=screw/targeted, 1=spike, 2=sawtooth
+    {
         Bomb[i].exists = false;
-        // HIT: 0=no collision, 1=alien, 2=bullet, 3=macro_bunker, 4=micro_bunker, 5=gunner, 6=ground
         Bomb[i].hit = 0;
         Bomb[i].bunker_macro_hit = 0;
-        Bomb[i].bunker_mem_row_addr = 0; // bunker erosion row/col image memory address
+        Bomb[i].bunker_mem_row_addr = 0;
         Bomb[i].bunker_mem_col_addr = 0;
-        Bomb[i].explosion_started = false; // not started
-        Bomb[i].steps_taken = 0;           // number of y-axis steps taken since spawning occurred
-        Bomb[i].x = 0;                     // current pos
-        Bomb[i].y = DISAPPEAR_Y;           // all bombs off screen
-        Bomb[i].anim_frame = 0;            // Index into animation images 0 - 3 for each bomb, 4 for explosion
-        Bomb[i].x0 = BOMB_BBOX_X0;         // add x,y to these to get actual bbox
+        Bomb[i].explosion_started = false;
+        Bomb[i].steps_taken = 0;
+        Bomb[i].x = 0;
+        Bomb[i].y = DISAPPEAR_Y;
+        Bomb[i].anim_frame = 0;
+        Bomb[i].x0 = BOMB_BBOX_X0;
         Bomb[i].x1 = BOMB_BBOX_X1;
         Bomb[i].y1 = BOMB_BBOX_Y1;
     }
     Bomb[2].anim_frame = 3;
-    Bomb[0].y0 = BOMB_BBOX_SCREW_Y0; // add x,y to these to get actual bbox
+    Bomb[0].y0 = BOMB_BBOX_SCREW_Y0;
     Bomb[1].y0 = BOMB_BBOX_SPIKE_Y0;
     Bomb[2].y0 = BOMB_BBOX_SAWTOOTH_Y0;
 
-    // BOMB VARS
-    // starting indices for next bomb drop 'column table'
-    bomb_type_counter = 2, bomb_type_selector = 2;
-    bomb_speed = 4; // initial speed, changes to 5 when # aliens is less than 9
+    bomb_type_counter = 2;
+    bomb_type_selector = 2;
+    bomb_speed = 4;
     bomb_reload_rate = BOMB_RELOAD_INITIAL;
-    screw_bomb_cooldown = 0; // skip one spawning turn if screw bomb was just terminated
+    screw_bomb_cooldown = 0;
     bomb_img_start_addr = 0;
+}
 
-    // SAUCER VARS
-    Saucer.next_spawn_time = SAUCER_SPAWN_TIME; // SAUCER_SPAWN_TIME; // # of ticks b4 next spawn, saucers spawn every 25.6 s from last saucer termination
+static void init_saucer_vars(void)
+{
+    Saucer.next_spawn_time = SAUCER_SPAWN_TIME;
     Saucer.spawn_enable = false;
     Saucer.score_start_time = 0;
     Saucer.explosion_x = DISAPPEAR_X;
     Saucer.sfx = false;
     saucer_expl_score_image_ptr = SAUCER_MAGENTA_EXPLOS_IMG_BASE;
-    Saucer.moving_left = true; // default start from right & move left
-    Saucer.exists = false;     // not until spawn occurs during game play
+    Saucer.moving_left = true;
+    Saucer.exists = false;
+}
 
-    // COLLISION VARS
-    bullet_hit = 0, bullet_hit_subset1 = 0, bullet_hit_subset2 = 0;
+static void init_collision_vars(void)
+{
+    bullet_hit = 0;
+    bullet_hit_subset1 = 0;
+    bullet_hit_subset2 = 0;
     bullet_micro_bunker_hit = 0;
     bullet_bomb_hit = 0;
     bullet_saucer_hit = 0;
     bullet_boundary_hit = 0;
-
-    // Bomb with Bullet and Bullet with Bomb Collisions
     shot_overlap_top = 0;
-    shot_overlap_bottom = 0, shot_column = 0;
-    bomb_top_row = 0, bomb_rows = 0;
+    shot_overlap_bottom = 0;
+    shot_column = 0;
+    bomb_top_row = 0;
+    bomb_rows = 0;
     bomb_image_mem = BOMB_IMG_BASE;
-
-    // bomb with bunker collisions
     bomb_micro_bunker_hit = false;
+    bunker_num = 4;
+}
 
-    // bunker
-    bunker_num = 4; // default value used to indicate bunker # has not been identified
+static void game_init(void)
+{
+    int i;
 
+    if (Game.num_players == 0)
+        print_string(2, 27, "    ", !slow);
+
+    init_player_state();
+
+    // Game state
+    round_is_over = false;
+    another_player = false;
+    current_time = 0;
+    Player[0].exists = 1;
+    Player[0].lives = 3;
+    Player[1].exists = Game.num_players;
+    Player[1].lives = Game.num_players * 3;
+    if (Game.num_players == 1)
+        another_player = true;
+
+    // Clear play area and scoring table sprites
+    clear_char_screen(7, 22);
+    for (i = 0; i < 4; i++)
+    {
+        ptr = SPR_CFG_ADDR(5 + i);
+        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, DISAPPEAR_Y);
+    }
+
+    if (Game.num_players == 1)
+        print_string(6, 14, "PLAYER <1>", !slow);
+    else
+        print_string(6, 14, "  READY?  ", !slow);
+    if (coin_delay(120))
+        return;
+    print_string(6, 14, "          ", !slow);
+
+    restore_bunkers(0);
+    restore_bunkers(1);
+
+    init_alien_vars();
+    init_gunner_vars();
+    init_bullet_vars();
+    init_bomb_vars();
+    init_saucer_vars();
+    init_collision_vars();
     init_sfx();
     init_sprites();
 
@@ -1744,266 +1703,221 @@ static void game_init(void)
 }
 
 // Control loop: processes round results, handles level completion, player swapping, then runs play loop
-static void control_loop(void)
+// Handle gunner death: player game over, full game over, or save state for swap.
+// Returns: true if control_loop should break (game over or demo coin inserted)
+static bool handle_gunner_death(void)
+{
+    if (Player[active_player].lives == 0)
+    {
+        Player[active_player].exists = 0;
+        Player[active_player].game_over = true;
+        if (Game.num_players == 1)
+        {
+            print_player_label(27, 9, !slow);
+            print_string(27, 19, "GAME OVER", !slow);
+            coin_delay(180);
+            print_string(27, 8, "                      ", !slow);
+            if (demo_terminated)
+                return true;
+            print_string(27, 9, "                          ", !slow);
+        }
+        if (!another_player)
+        {
+            clear_char_screen(5, 22);
+            print_string(27, 6, "                        ", !slow);
+            ptr = SPR_CFG_ADDR(SAUCER_FIRST_SPR_NUM);
+            xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, SAUCER_BASE_X);
+            ptr = SPR_CFG_ADDR(SAUCER_EXPLOS_FIRST_SPR_NUM);
+            xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, SAUCER_BASE_X);
+            print_string(5, 15, "GAME OVER", slow);
+            coin_delay(180);
+            print_string(5, 14, "          ", !slow);
+            save_hiscore();
+            return true;
+        }
+    }
+    else if (another_player)
+    {
+        // Save active player's state for later resumption
+        Player[active_player].alien_ref_x = alien_ref_x;
+        Player[active_player].alien_ref_y = alien_ref_y;
+        Player[active_player].alien_anim = alien_anim;
+    }
+    return false;
+}
+
+// Handle level completion: celebrate, restore aliens/bunkers, advance level.
+// Returns: true if control_loop should break (demo coin inserted)
+static bool handle_level_complete(void)
 {
     int i, j;
-    unsigned char rounds_completed = 0;
+    level_completed = false;
+    clear_char_screen(5, 22);
+    hide_all_sprites();
+
+    print_player_label(6, 15, !slow);
+    print_string(9, 10, "WAVE     COMPLETED!", !slow);
+    update_wave_number(true);
+    update_wave_number(false);
+    if (coin_delay(240))
+        return true;
+    print_string(6, 5, "                              ", !slow);
+    print_string(9, 5, "                              ", !slow);
+
+    restore_bunkers(active_player);
+
+    // Restore all aliens
+    Player[active_player].num_of_aliens = NUM_ALIEN_SPR;
+    for (i = 0; i < NUM_ALIEN_SPR; i++)
+        players_alien_exists[active_player][i] = 1;
+    alien_anim = 1;
+
+    // Advance starting Y position
+    if (Player[active_player].index_start_y_pos > 8)
+        Player[active_player].index_start_y_pos = 1;
+    Player[active_player].alien_ref_y = mtrx_y_start[Player[active_player].index_start_y_pos];
+    alien_ref_y = mtrx_y_start[Player[active_player].index_start_y_pos];
+    Player[active_player].index_start_y_pos++;
+    Player[active_player].level++;
+
+    // Reset matrix position and direction
+    Player[active_player].alien_ref_x = INVADER_MTRX_START_X;
+    alien_ref_x = INVADER_MTRX_START_X;
+    Player[active_player].alien_x_incr = 2;
+    Player[active_player].alien_1st_col = 0;
+    Player[active_player].alien_1st_col_rel_x = 0;
+    Player[active_player].alien_last_col = 10;
+    Player[active_player].alien_last_col_rel_x = 176;
+
+    // Reset unoccupied column/row tracking
+    for (j = 0; j < NUM_INVADER_COLS; j++)
+        alien_unoccupied_rows_per_col[active_player][j] = 0;
+    for (j = 0; j < NUM_INVADER_ROWS; j++)
+        alien_unoccupied_cols_per_row[active_player][j] = 0;
+
+    alien_num = NUM_ALIEN_SPR - 1;
+    alien_x = alien_ref_x;
+    alien_y = alien_ref_y;
+    Player[active_player].bullets_fired = 0;
+    skip_alien_sprite_update = true;
+    Player[active_player].alien_march_index = 0;
+    return false;
+}
+
+// Swap to the other player: update display, bunker pointers, alien state
+static void handle_player_swap(void)
+{
+    int i;
+    active_player = 1 - active_player;
+    clear_char_screen(5, 22);
+    hide_all_sprites();
+
+    print_player_label(6, 14, slow);
+    update_wave_number(false);
+    update_lives_icons();
+    update_numerical_lives(blink, Player[active_player].lives);
+    print_string(6, 9, "                          ", !slow);
+
+    // Switch bunker image pointers to new player's set
+    bunker_img_ptr = active_player ? bunker_plyr2_img[0] : bunker_plyr1_img[0];
+    for (i = 0; i < 4; i++)
+    {
+        ptr = SPR_CFG_ADDR(BUNKER_FIRST_SPR_NUM + i);
+        xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, bunker_img_ptr);
+        bunker_img_ptr += SPR_32X32_SIZE;
+    }
+
+    // Restore new player's alien matrix state
+    alien_ref_x = Player[active_player].alien_ref_x;
+    alien_ref_y = Player[active_player].alien_ref_y;
+    alien_anim = Player[active_player].alien_anim;
+    alien_num = NUM_ALIEN_SPR - 1;
+    alien_x = alien_ref_x;
+    alien_y = alien_ref_y;
+    skip_alien_sprite_update = true;
+}
+
+// Reset all per-round variables before entering play_loop
+static void reset_pre_play_vars(void)
+{
+    int i;
+
+    update_lives_icons();
+    if (Player[active_player].bonus_active)
+    {
+        ptr = SPR_CFG_ADDR(LIVES_FIRST_SPR_NUM + (Player[active_player].lives - 1) + (4 * active_player));
+        xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, LIVES_BONUS_IMG_BASE);
+    }
+
+    update_wave_number(false);
+
+    // Game state
+    round_is_over = false;
+    Gunner.state = GUNNER_SPAWNING;
+    inflight_complete = false;
+    alien_landed = false;
+    Gunner.spawn_time = GUNNER_SPAWN_TICKS;
+    Game.bomb_spawn_enable = false;
+    Game.bomb_spawn_time = BOMB_INITIAL_SPAWN_TICKS;
+    Saucer.exists = false;
+    Saucer.spawn_enable = false;
+    Saucer.next_spawn_time = SAUCER_SPAWN_TIME;
+    alien_index_wrapped = 0;
+    alien_hit = 0;
+
+    // SFX state
+    dummy_read = 0;
+    toggle_tones = 1;
+    loops = 0;
+    bullet_loops = 0;
+    ramp_up = true;
+    alien_march_sfx_enable = true;
+    alien_march_sfx_timer = 100;
+    alien_march_sfx_start = 0;
+
+    // Reappear bunker sprites
+    for (i = 0; i < NUM_OF_BUNKER_SPR; i++)
+    {
+        ptr = SPR_CFG_ADDR(BUNKER_FIRST_SPR_NUM + i);
+        xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, BUNKER_Y);
+    }
+
+    // Sync to vsync
+    v = RIA.vsync;
+}
+
+static void control_loop(void)
+{
     while (1)
     {
-        // #### PROCESS RESULTS FROM LAST ROUND, UNLESS IT'S THE FIRST ROUND, IN WHICH CASE...SKIP ALL THIS
         if (round_is_over)
-        { // either gunner was hit, alien landed or level was completed
-            rounds_completed++;
-            // turn off all 8 SFX channels
+        {
             silence_all_sfx();
-            // reset PSG
-            xreg(0, 1, 0x00, SFX_BASE_ADDR); // initialize PSG... set base address of xregs
+            xreg(0, 1, 0x00, SFX_BASE_ADDR);
 
-            // check for another player
             another_player = (Game.num_players == 1) && (Player[1 - active_player].exists == 1);
-            // ####  'GUNNER WAS HIT' HANDLER  ####
-            // ####################################
+
             if (Gunner.state == GUNNER_BLOWN_UP)
             {
-                // ##### CURRENT PLYR GAME OVER ####
-                if (Player[active_player].lives == 0)
-                {
-                    Player[active_player].exists = 0;
-                    Player[active_player].game_over = true;
-                    if (Game.num_players == 1)
-                    { // TWO PLAYER GAME AND OTHER PLAYER EXISTS
-                        print_string(27, 9, "PLAYER <", !slow);
-                        if (active_player == 0)
-                            print_string(27, 17, "1> GAME OVER", !slow);
-                        else
-                            print_string(27, 17, "2> GAME OVER", !slow);
-                        coin_delay(180);
-                        print_string(27, 8, "                      ", !slow);
-                        if (demo_terminated)
-                            break;
-                        print_string(27, 9, "                          ", !slow);
-                    }
-                    // ##### FULL GAME OVER #####
-                    // execute GAME OVER procedure (both players)
-                    if (!another_player)
-                    {
-                        clear_char_screen(5, 22);
-                        print_string(27, 6, "                        ", !slow);
-                        ptr = SPR_CFG_BASE + (SAUCER_FIRST_SPR_NUM * sizeof(vga_mode4_sprite_t));
-                        xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, SAUCER_BASE_X);
-                        ptr = SPR_CFG_BASE + (SAUCER_EXPLOS_FIRST_SPR_NUM * sizeof(vga_mode4_sprite_t));
-                        xram0_struct_set(ptr, vga_mode4_sprite_t, x_pos_px, SAUCER_BASE_X);
-                        print_string(5, 15, "GAME OVER", slow);
-                        coin_delay(180);
-                        print_string(5, 14, "          ", !slow);
-                        // update hiscore file
-                        fptr = fopen("raiders.hiscore", "wb+");
-                        fwrite(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
-                        fclose(fptr);
-                        break;
-                    }
-                }
-                // ##### CURRENT PLYR ALIVE AND WELL #####
-                else if (another_player)
-                {
-                    // ##### THE OTHER PLAYER IS TOO #####
-                    // so, save the active player's VARS that aren't in the Player[] STRUCT, then swap players below
-                    Player[active_player].alien_ref_x = alien_ref_x;
-                    Player[active_player].alien_ref_y = alien_ref_y;
-                    Player[active_player].alien_anim = alien_anim;
-                }
-                // Else
-                // ##### OTHERWISE OTHER PLAYER IS DEAD OR NEVER EXISTED... SO, RESUME WITH CURRENT PLAYER
+                if (handle_gunner_death())
+                    break;
             }
-
-            // ####  START NEW LEVEL HANDLER  ####
-            // ###################################
-            // update lives # to include bonus if it's there
-            // draw std lives icons based on # of lives and draw bonus icon in next open position based on bonus flag = true
-            // save new state at new level
-            // celebrate completion -- clear play area, print level/wave X for active player, pause
-            // clear the game play area
-            // REAPPEAR SPRITES in prep for start of next level
-            // restore player's bunkers, update screen with new # of lives and lives sprites, draw aliens,
-            // blink new player's score start next round, set timers for spawning gunner, bombs and saucer
             else if (level_completed)
             {
-                level_completed = false;
-                // CLEAR playing field (text and sprites)
-                clear_char_screen(5, 22);
-                hide_all_sprites();
-
-                // CELEBRATE Level Completion!!
-                print_string(6, 15, "PLAYER <", !slow);
-                if (active_player == 0)
-                    print_string(6, 23, "1>", !slow);
-                else
-                    print_string(6, 23, "2>", !slow);
-                print_string(9, 10, "WAVE     COMPLETED!", !slow);
-                update_wave_number(true); // true = print at top of screen, false bottom
-                update_wave_number(false);
-                if (coin_delay(240))
+                if (handle_level_complete())
                     break;
-                print_string(6, 5, "                              ", !slow);
-                print_string(9, 5, "                              ", !slow);
-
-                // RELOAD PRISTINE BUNKER IMAGES
-                // restore aliens and bunkers to pristine state, but do not display... yet, use
-                // PLAY LOOP sprite update to load updated sprites to screen
-                restore_bunkers(active_player);
-
-                // NEW LEVEL SO RESTORE ALL ALIENS TO HEALTH
-                Player[active_player].num_of_aliens = NUM_ALIEN_SPR;
-                for (i = 0; i < NUM_ALIEN_SPR; i++)
-                {
-                    players_alien_exists[active_player][i] = 1;
-                }
-                alien_anim = 1;
-                // update key state save VARS and reinitialize to start the next level/wave
-                // increment index into 'starting y pos' table, roll-over after 8
-                if (Player[active_player].index_start_y_pos > 8)
-                    Player[active_player].index_start_y_pos = 1;
-                Player[active_player].alien_ref_y = mtrx_y_start[Player[active_player].index_start_y_pos];
-                alien_ref_y = mtrx_y_start[Player[active_player].index_start_y_pos];
-                Player[active_player].index_start_y_pos++;
-                Player[active_player].level++;
-                Player[active_player].alien_ref_x = INVADER_MTRX_START_X;
-                alien_ref_x = INVADER_MTRX_START_X;
-                Player[active_player].alien_x_incr = 2; // right = +2, left equal -2
-                Player[active_player].alien_1st_col = 0;
-                Player[active_player].alien_1st_col_rel_x = 0;
-                Player[active_player].alien_last_col = 10;
-                Player[active_player].alien_last_col_rel_x = 176;
-
-                // Reset count of unoccupied alien columns and rows to zero
-                // When an alien is terminated the bullet handler will add 1 to the # of unoccupied cols, when = 5, then col is empty
-                for (j = 0; j < NUM_INVADER_COLS; j++)
-                    alien_unoccupied_rows_per_col[active_player][j] = 0;
-                for (j = 0; j < NUM_INVADER_ROWS; j++)
-                    alien_unoccupied_cols_per_row[active_player][j] = 0;
-                alien_num = NUM_ALIEN_SPR - 1;
-                alien_x = alien_ref_x;
-                alien_y = alien_ref_y;
-                Player[active_player].bullets_fired = 0;
-                skip_alien_sprite_update = true;
-                // SFX reinit
-                Player[active_player].alien_march_index = 0;
-            } // END NEW LEVEL HANDLER
-
-            // #####  ANOTHER PLAYER??  #####
-            // #############################
-            // if another player exists then always swap players before reentering PLAY LOOP
-            if (another_player)
-            {
-                // #####  SWAP PLAYERS  #####
-                active_player = 1 - active_player;
-                // CLEAR PLAY FIELD TEXT & SPRITES
-                clear_char_screen(5, 22);
-                hide_all_sprites();
-                // show new player ID at top of screen
-                print_string(6, 14, "PLAYER <", slow);
-                if (active_player == 0)
-                    print_string(6, 22, "1>", slow);
-                else
-                    print_string(6, 22, "2>", slow);
-                update_wave_number(false);
-                // update lives ICONs to represent # lives of new player
-                update_lives_icons();
-                update_numerical_lives(blink, Player[active_player].lives);
-                // erase the text displayed above
-                print_string(6, 9, "                          ", !slow);
-
-                // change BUNKER SPRITE IMAGE pointers to OTHER PLAYER'S bunker images
-                bunker_img_ptr = (1 - active_player) * bunker_plyr1_img[0] + active_player * bunker_plyr2_img[0];
-                for (i = 0; i < 4; i++)
-                { // switch to the other bank of 4 bunker images
-                    ptr = SPR_CFG_BASE + ((BUNKER_FIRST_SPR_NUM + i) * sizeof(vga_mode4_sprite_t));
-                    xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, bunker_img_ptr);
-                    bunker_img_ptr += SPR_32X32_SIZE;
-                }
-
-                // update working copy of ref positions using new player's data
-                // change ALIEN SPRITE X/Y POSITIONS to OTHER PLAYER"S prior positions
-                alien_ref_x = Player[active_player].alien_ref_x;
-                alien_ref_y = Player[active_player].alien_ref_y;
-                // ditto for state of animation
-                alien_anim = Player[active_player].alien_anim;
-
-                // reinit ALIEN NUM index for ALIEN MATRIX, reinit ALIEN# 0 X/Y POS = REFERENCE VALUES
-                alien_num = NUM_ALIEN_SPR - 1;
-                alien_x = alien_ref_x;
-                alien_y = alien_ref_y;
-                skip_alien_sprite_update = true;
-            } // ELSE there is NO OTHER PLAYER, so keep current player
-
-            // reappear fresh set of bunker sprites
-            for (i = 0; i < NUM_OF_BUNKER_SPR; i++)
-            {
-                ptr = SPR_CFG_BASE + ((BUNKER_FIRST_SPR_NUM + i) * sizeof(vga_mode4_sprite_t));
-                xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, BUNKER_Y);
             }
-        } // END OF "ROUND OVER" HANDLER FOR GUNNER HIT and LEVEL COMPLETED "round is over"
 
-        // ###############################################################
-        // #######  STUFF TO INIT/RESET/REINIT PRIOR TO PLAY LOOP  #######
-        // ###############################################################
-
-        // LIVES UPDATES
-        // in the CONTROL LOOP player's maybe swapped, so need to fully reinit the LIVES ICONS before starting PLAY LOOP
-        // use # of lives remaining to turn on the right # of Lives ICONS and turn off the others
-        //      put Lives ICON handler here and always initialize/reinitialize the Lives Array based on # of lives remaining, with the goal of
-        // .... starting each round (pre-gunner-sapwn) with all lives shown as Lives ICONS lined up across the bottom, during SPAWN the last
-        // .... ICON will be removed and a gunner ICON will be spawned in its "play" position above the Lives ICONS
-        // .... DO the actual ICON sprite updates, appear/disapper (x-pos) and image (color) changes in the sprite update, buy when the update
-        // .... flag is set
-        // Lives Array - 1st index is player#, 2nd is 1 = existence, valid patterns 000, 100, 110, 111
-        // .... start with 1st 3 ICONS = exists, update as appropriate using # of lives remaining to update existence flags
-
-        update_lives_icons();
-        if (Player[active_player].bonus_active)
-        { // Handle BONUS case
-            ptr = SPR_CFG_BASE + (LIVES_FIRST_SPR_NUM + ((Player[active_player].lives - 1) + (4 * active_player))) * (sizeof(vga_mode4_sprite_t));
-            xram0_struct_set(ptr, vga_mode4_sprite_t, xram_sprite_ptr, LIVES_BONUS_IMG_BASE);
+            if (another_player)
+                handle_player_swap();
         }
 
-        // update # waves at bottom of screen
-        update_wave_number(false); // false = print at bottom of screen
-
-        // (Re)initialize KEY VARS
-        round_is_over = false;
-        Gunner.state = GUNNER_SPAWNING;
-        inflight_complete = false;
-        alien_landed = false;
-        Gunner.spawn_time = GUNNER_SPAWN_TICKS;
-        Game.bomb_spawn_enable = false;
-        Game.bomb_spawn_time = BOMB_INITIAL_SPAWN_TICKS;
-        Saucer.exists = false;
-        Saucer.spawn_enable = false;
-        Saucer.next_spawn_time = SAUCER_SPAWN_TIME;
-        alien_index_wrapped = 0;
-        alien_hit = 0;
-
-        // SFX VARS
-        dummy_read = 0;
-        toggle_tones = 1; // put at SFX var initialization, may need unique one for each channel
-        loops = 0;
-        bullet_loops = 0;
-        ramp_up = true;
-        alien_march_sfx_enable = true;
-        alien_march_sfx_timer = alien_march_sfx_rate[Player[active_player].alien_march_index];
-        alien_march_sfx_timer = 100;
-        alien_march_sfx_start = 0;
-
-        // #######  GETTING READY TO TRANSITION TO PLAY LOOP  #######
-        // grab current value of vsync, wait for VSYNC to increment to v + 1, sync play loop to that event
-        v = RIA.vsync;
-        // END CONTROL LOOP
-
+        reset_pre_play_vars();
         play_loop();
         if (Game.restart)
             break;
-    } // END OF CONTROL LOOP
-} // END OF CONTROL_LOOP
+    }
+}
 
 // ####################################################################################################
 // ####################    EXTRACTED PLAY LOOP SUB-FUNCTIONS    ####################################
@@ -2062,13 +1976,13 @@ static void update_sprites(void)
         {
             ptr = SPR_CFG_BASE + ((BOMB_FIRST_SPR_NUM + i) * sizeof(vga_mode4_sprite_t));
             xram0_struct_set(ptr, vga_mode4_sprite_t, y_pos_px, Bomb[i].y);
-            Bomb[i].y = 242; // to run this once per explosion
+            Bomb[i].y = BOMB_DISAPPEAR_SENTINEL; // to run this once per explosion
         }
     }
     // if explosion is in progress, no position updates, image = explosion, otherwise new position and next animation image
     ptr = SPR_CFG_BASE + ((BOMB_FIRST_SPR_NUM + active_bomb_idx) * sizeof(vga_mode4_sprite_t));
     // only update explos image right after explosion starts
-    if (active_bomb_idx < 3)
+    if (active_bomb_idx < NUM_BOMB_SPR)
     {
         if (Bomb[active_bomb_idx].hit > 0)
         {
@@ -2521,7 +2435,7 @@ static void bomb_move_spawn_all(void)
     }
     // initializing var to track which bomb just moved/spawned, default is 3 (none), otherwise 0-2
     // 3 indicates no bomb selected which triggers a do-over after continuing to the next loop,
-    active_bomb_idx = 3; // default, indicates none have been updated
+    active_bomb_idx = BOMB_NO_UPDATE;
     if (Player[active_player].num_of_aliens < 9)
         bomb_speed = 5;
 
@@ -2629,18 +2543,11 @@ static void bomb_move_spawn_all(void)
 static void bomb_collision_detect(void)
 {
     unsigned bunker_start_addr1, bunker_start_addr2;
-    // #########################################################
-    // ###########     BOMB COLLISION DETECTION     ############
-    // #########################################################
-    // NOTE; need to know if Gunner is hit b4 executing handlers, so we can shutdown alien movement, but let inflight objects terminate naturually
-    // 0 = no collision, 1 = alien, 2 = bullet, 3 = macro_bunker, 4 = micro_bunker, 5 = ground, 6 = gunner
-    //      all but gunner collisions trigger a bomb explosion image
-    //      the explosion duration for actual explosions is the same all that have one
-    //      but the duration for a gunner collisions matches the gunner explosion duration
 
-    // ########################################
-    // BOMB hits BULLET (NOT>>> bullet to bomb)
-    // ########################################
+    if (active_bomb_idx >= NUM_BOMB_SPR)
+        return;
+
+    // BOMB hits BULLET
     // hit = 2 for contact with bullet (but not the other way around)
     if (bullet_x0 >= Bomb[active_bomb_idx].x0 && bullet_x0 < Bomb[active_bomb_idx].x1)
     {
@@ -2648,7 +2555,7 @@ static void bomb_collision_detect(void)
         shot_overlap_top = bullet_y1 - Bomb[active_bomb_idx].y;
         shot_overlap_bottom = Bomb[active_bomb_idx].y1 - bullet_y0;
         shot_column = 2 + bullet_x0 - Bomb[active_bomb_idx].x0;
-        if (shot_overlap_bottom > 0 && shot_overlap_bottom < 13 && shot_overlap_top > 0 && shot_overlap_top < 13)
+        if (shot_overlap_bottom > 0 && shot_overlap_bottom < SHOT_OVERLAP_MAX && shot_overlap_top > 0 && shot_overlap_top < SHOT_OVERLAP_MAX)
         {
             if (shot_overlap_top < 4)
             {
@@ -3303,9 +3210,7 @@ static void play_loop(void)
         if (Game.restart)
         {
             silence_all_sfx();
-            fptr = fopen("raiders.hiscore", "wb+");
-            fwrite(&Game.hi_score, sizeof(Game.hi_score), 1, fptr);
-            fclose(fptr);
+            save_hiscore();
             break;
         }
 

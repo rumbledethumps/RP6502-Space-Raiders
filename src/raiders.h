@@ -103,6 +103,7 @@ typedef enum
 
 // SPRITE CONFIG BASE ADDR AND IMAGE BASE ADDR... and SPRITE IMAGE BUFFER SIZES
 #define SPR_CFG_BASE 0xC000U   // Base address of sprite config array
+#define SPR_CFG_ADDR(n) (SPR_CFG_BASE + ((n) * sizeof(vga_mode4_sprite_t)))
 #define SPR_IMG_BASE 0x0200U   // Base address of sprite image array, # images not necessarily equal to number of sprites
 #define SPR_32X32_SIZE 0x0800U // Buffer size for each sprite size
 #define SPR_16X16_SIZE 0X0200U
@@ -359,6 +360,13 @@ typedef enum
 
 #define TOTAL_NUM_SPR (NUM_OF_BUNKER_SPR + NUM_OF_SAUCER_EXPLOS_SPR + NUM_ALIEN_SPR + NUM_SAUCER_SPR + NUM_GUNNER_SPR + NUM_LIVES_SPR + NUM_BULLET_SPR + NUM_BOMB_SPR)
 // #define TOTAL_NUM_SPR 72
+
+// BOMB UPDATE SENTINEL (no bomb was moved/spawned this tick)
+#define BOMB_NO_UPDATE 3
+// One-shot sentinel so bomb disappear sprite update runs exactly once
+#define BOMB_DISAPPEAR_SENTINEL 242
+// Maximum possible overlap between a 4px bullet and 8px bomb
+#define SHOT_OVERLAP_MAX 13
 
 // For accessing the font library
 #define pgm_read_byte(addr) (*(const unsigned char *)(addr))
